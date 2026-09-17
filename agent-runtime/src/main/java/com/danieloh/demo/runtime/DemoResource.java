@@ -34,11 +34,11 @@ public class DemoResource {
     @GET @Path("/status")
     public Map<String,Object> status() {
         boolean modelReady=false;
-        try {
+        try { if (modelConfigured()) {
             var response=http.send(HttpRequest.newBuilder(URI.create(modelUrl+"/models")).timeout(Duration.ofSeconds(3))
                 .header("Authorization","Bearer "+modelKey).GET().build(),HttpResponse.BodyHandlers.ofString());
             modelReady=response.statusCode()==200 && response.body().contains("\""+model+"\"");
-        } catch(Exception e) {if(e instanceof InterruptedException)Thread.currentThread().interrupt();}
+        } } catch(Exception e) {if(e instanceof InterruptedException)Thread.currentThread().interrupt();}
         recover();
         return Map.of("quarkus","3.39.3","java",Runtime.version().feature(),"model",model,"modelReady",modelReady,
             "gateway",gatewayKind,"database",!db.query("SELECT to_json(1)").isEmpty(),"data","Seeded enterprise incidents");
@@ -65,6 +65,11 @@ public class DemoResource {
                 "runtimePath",List.of("Quarkus agents","Policy gateway","MCP tools","PostgreSQL"),"transport","MCP Streamable HTTP","writePolicy","human approval required"));
     }
     @POST @Path("/runs") public Response start(@Valid @NotNull StartRequest request) {
+        if ("live".equals(request.mode()) && !modelConfigured()) {
+            return Response.status(Response.Status.SERVICE_UNAVAILABLE)
+                .entity(Map.of("error", "Set OPENAI_API_KEY on the server and restart the runtime, or select Rehearsal. For another provider, set LLM_API_KEY."))
+                .build();
+        }
         UUID id=runs.start(request.incidentId(),request.mode(),request.prompt());
         return Response.accepted(Map.of("id",id)).header("Location","/api/runs/"+id).build();
     }
@@ -78,6 +83,10 @@ public class DemoResource {
     }
     @GET @Path("/audit") public List<JsonNode> audit() {return db.query("SELECT row_to_json(a) FROM (SELECT * FROM gateway_audit ORDER BY id DESC LIMIT 80) a");}
     @GET @Path("/followups") public List<JsonNode> tasks() {return db.query("SELECT row_to_json(f) FROM (SELECT * FROM followups ORDER BY created_at DESC LIMIT 25) f");}
+
+    private boolean modelConfigured() {
+        return !modelKey.isBlank() && !"not-configured".equals(modelKey);
+    }
 
     private void recover() {
         db.update("UPDATE runs SET status='FAILED',report='Interrupted or timed out. Start a new run.',updated_at=now() WHERE status='RUNNING' AND created_at < now()-interval '160 seconds'");

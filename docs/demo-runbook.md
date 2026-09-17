@@ -1,6 +1,6 @@
 # Presenter runbook
 
-Do the first container build and model download before the session. Run `./demo.sh smoke` and `SMOKE_MODE=live ./demo.sh smoke`, then open the SPA and reconnect with the presenter key. Leave the app running; the timer is presentation guidance, not a shutdown clock.
+Do the first container build and configure `OPENAI_API_KEY` before the session. The default provider is OpenAI; a model download is needed only for optional Ollama. Run `./demo.sh smoke` and `SMOKE_MODE=live ./demo.sh smoke`, then open the SPA and reconnect with the presenter key. Leave the app running; the timer is presentation guidance, not a shutdown clock.
 
 ## Opening — 1 minute
 

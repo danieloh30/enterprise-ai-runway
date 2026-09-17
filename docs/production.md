@@ -28,7 +28,7 @@ The in-process execution limit is per replica. Use a durable worker queue and sh
 
 ## Network and gateway
 
-Terminate browser TLS at an approved ingress. Protect management endpoints (`/q/*`) using private management networking or ingress restrictions. Use TLS/mTLS between services or your organization's service mesh. Native Ollama over local HTTP is for the laptop demo only.
+Terminate browser TLS at an approved ingress. Protect management endpoints (`/q/*`) using private management networking or ingress restrictions. Use TLS/mTLS between services or your organization's service mesh. The default OpenAI connection uses HTTPS; inject `OPENAI_API_KEY` from your secret manager into the runtime only. Restrict model egress and approve the data sent to the provider. Optional native Ollama over local HTTP is for the laptop demo only.
 
 The policy simulator supports request/response MCP methods needed by this demo, not every MCP capability. Its fixed-window limit is per principal **per gateway process**, so deploy one gateway replica or replace the limiter with DataPower/API Connect or another shared policy service. Gateway audit admission is fail-closed when the audit store is unavailable. The audit is useful operational evidence, not cryptographically tamper-proof storage; export it to your central audit system.
 

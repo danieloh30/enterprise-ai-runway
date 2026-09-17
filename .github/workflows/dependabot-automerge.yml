@@ -1,0 +1,78 @@
+name: Merge verified Dependabot updates
+on:
+  workflow_run:
+    workflows: [Verify]
+    types: [completed]
+permissions: {}
+concurrency:
+  group: dependabot-merge-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+jobs:
+  merge:
+    if: >-
+      github.repository == 'danieloh30/enterprise-ai-runway' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: write
+      pull-requests: write
+    steps:
+      # This privileged workflow never checks out or executes pull request code.
+      - name: Validate the tested commit and Dependabot pull request
+        id: candidate
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          script: |
+            const event = context.payload.workflow_run;
+            const repo = context.repo;
+            const repository = context.payload.repository;
+            const { data: run } = await github.rest.actions.getWorkflowRun({
+              ...repo, run_id: event.id
+            });
+            if (run.event !== 'pull_request' || run.conclusion !== 'success' ||
+                run.run_attempt !== event.run_attempt ||
+                run.path !== '.github/workflows/verify.yml' ||
+                run.head_sha !== event.head_sha ||
+                run.head_repository?.id !== repository.id) {
+              core.info('Skip: the current Verify run is not eligible.');
+              return;
+            }
+            const candidates = await github.paginate(
+              github.rest.repos.listPullRequestsAssociatedWithCommit,
+              { ...repo, commit_sha: run.head_sha, per_page: 100 }
+            );
+            for (const candidate of candidates) {
+              const { data: pr } = await github.rest.pulls.get({
+                ...repo, pull_number: candidate.number
+              });
+              if (pr.state !== 'open' || pr.draft ||
+                  pr.user.login !== 'dependabot[bot]' || pr.user.type !== 'Bot' ||
+                  pr.head.repo?.id !== repository.id || pr.base.repo?.id !== repository.id ||
+                  pr.base.ref !== repository.default_branch ||
+                  !pr.head.ref.startsWith('dependabot/maven/') ||
+                  pr.head.sha !== run.head_sha) continue;
+              const files = await github.paginate(github.rest.pulls.listFiles, {
+                ...repo, pull_number: pr.number, per_page: 100
+              });
+              if (!files.length || !files.every(file =>
+                  file.status === 'modified' && /(^|\/)pom\.xml$/.test(file.filename))) {
+                core.info(`Skip #${pr.number}: only existing Maven POM updates are eligible.`);
+                continue;
+              }
+              core.setOutput('number', String(pr.number));
+              core.setOutput('head-sha', pr.head.sha);
+              return;
+            }
+            core.info('No eligible Dependabot PR for this tested commit.');
+      - name: Merge only the verified head
+        if: steps.candidate.outputs.number != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ steps.candidate.outputs.number }}
+          TESTED_SHA: ${{ steps.candidate.outputs.head-sha }}
+        run: >-
+          gh pr merge "$PR_NUMBER" --repo "$GITHUB_REPOSITORY"
+          --auto --squash --match-head-commit "$TESTED_SHA"

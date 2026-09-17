@@ -8,16 +8,15 @@ The SPA walks through the slide's three ideas: design with IBM Bob, secure MCP t
 
 ## Start on an M4 Mac
 
-Install a **JDK 25**, **Podman**, and **Ollama**. Maven is supplied by the checked-in wrapper. Bash, OpenSSL and Python 3 are used by the launcher and smoke checks. Node.js is needed only for optional UI tests.
+Install a **JDK 25** and **Podman**, and configure an **OpenAI API key** for live AI. Maven is supplied by the checked-in wrapper. Bash, OpenSSL and Python 3 are used by the launcher and smoke checks. Node.js is needed only for optional UI tests.
 
 ```bash
 # If Podman has not been initialized:
 podman machine init --cpus 4 --memory 6144
 podman machine start
 
-# Run Ollama natively on macOS for Metal acceleration.
-ollama serve                    # separate terminal; skip if Ollama is already running
-ollama pull llama3.2:latest
+# Set this in your local shell; never put the key in browser code or Git.
+export OPENAI_API_KEY="your-api-key"
 
 # In this project:
 ./demo.sh up
@@ -27,9 +26,9 @@ Open **http://localhost:8090**, then paste the presenter key printed by the laun
 
 The launcher detects an SDKMAN current JDK when `JAVA_HOME` is unset. For a standard macOS JDK installation use `export JAVA_HOME=$(/usr/libexec/java_home -v 25)`. If Java 25 is installed elsewhere, set `JAVA_HOME` to that JDK. `./mvnw -version` must report Java 25.
 
-The first build downloads dependencies and ARM64 container images. Allow 5–10 minutes **before** the presentation. The timed demo starts after the stack is ready. Reserve about 6 GB for the Podman VM, plus memory for macOS and the native model; an M4 Mac with 16 GB or more is a useful baseline. Actual inference speed depends on model size and memory pressure.
+The first build downloads dependencies and ARM64 container images. Allow 5–10 minutes **before** the presentation. The timed demo starts after the stack is ready. Reserve about 6 GB for the Podman VM. OpenAI runs inference remotely, so no local model download or GPU allocation is needed. Live AI requires internet connectivity and API access; rehearse once before presenting.
 
-Only the SPA/API port is published, bound to `127.0.0.1`. PostgreSQL, the gateway and MCP tools are private to `runway-net`. Application containers run as UID 1001, with read-only root filesystems, dropped capabilities, resource limits and no privilege escalation. Ollama runs on the Mac, accessed through `host.containers.internal`.
+Only the SPA/API port is published, bound to `127.0.0.1`. PostgreSQL, the gateway and MCP tools are private to `runway-net`. Application containers run as UID 1001, with read-only root filesystems, dropped capabilities, resource limits and no privilege escalation. Only the agent runtime receives `OPENAI_API_KEY`; it calls OpenAI over HTTPS. The key is never sent to the SPA, gateway or MCP tools.
 
 ## What is real in this demo?
 
@@ -65,7 +64,7 @@ flowchart LR
     Bob[IBM Bob in IDE] -. generates/reviews code .-> Runtime
     UI[Runway SPA] -->|Presenter key or OIDC token| Runtime[Quarkus runtime]
     Runtime --> Investigator[Investigator AI service]
-    Investigator <-->|Tool calling| LLM[Native Ollama / compatible model API]
+    Investigator <-->|Tool calling| LLM[OpenAI API / optional compatible provider]
     Investigator -->|Read-only MCP credential| Gateway[Policy gateway / DataPower boundary]
     Runtime --> Reviewer[Reviewer AI service: no tools]
     Reviewer <-->|Risk review| LLM
@@ -92,17 +91,28 @@ MCP is **Streamable HTTP**, request/response subset; GET subsidiary streams and 
 `./demo.sh init` generates independent random credentials into `.env` with mode 0600. `.env` and build outputs are ignored by Git. Start from `.env.example` only when supplying your own configuration. Never commit real credentials.
 
 ```properties
-# Default: native Ollama from the Podman VM
+# Default .env settings; export OPENAI_API_KEY in your shell before startup.
+LLM_BASE_URL=https://api.openai.com/v1
+LLM_MODEL=gpt-4.1-mini
+```
+
+Both agents use **OpenAI by default**, through LangChain4j Chat Completions. [GPT-4.1 mini](https://developers.openai.com/api/docs/models/gpt-4.1-mini) supports function calling and suits the demo's short, bounded requests. Override `LLM_MODEL` to use another compatible model. Models with different temperature/reasoning requirements may need corresponding LangChain4j settings adjusted.
+
+The launcher forwards the shell's `OPENAI_API_KEY` only to the runtime container. You may also store it in the ignored, mode-0600 `.env` for local development. Keep cloud keys on the server, following [OpenAI authentication guidance](https://developers.openai.com/api/reference/overview#authentication). Without a model credential, Rehearsal still works and Live AI returns a clear 503 setup error before creating a run. Invalid/revoked keys and provider errors fail visibly; no canned response is substituted.
+
+For an optional native Ollama setup, run `ollama serve` and `ollama pull llama3.2:latest`, then change these settings in `.env`:
+
+```properties
 LLM_BASE_URL=http://host.containers.internal:11434/v1
 LLM_MODEL=llama3.2:latest
 LLM_API_KEY=ollama
 ```
 
-An OpenAI-compatible enterprise endpoint can be used by changing these three settings. The model must support tool calling. The `ollama` value is a local protocol placeholder, not a cloud credential. The model availability indicator checks `/models`; providers that do not expose that endpoint may still work. It does not guarantee adequate model quality or latency.
+`LLM_API_KEY` is an explicit override for other OpenAI-compatible providers and takes precedence over `OPENAI_API_KEY`. Remove that override when switching back to OpenAI, and restore the default base URL/model. Existing `.env` files are preserved by `init`; when upgrading from the original Ollama defaults, make these edits before restarting. The model must support tool calling. `ollama` is a local protocol placeholder. The availability indicator checks `/models`; providers that do not expose that endpoint may still work. It does not guarantee model quality or latency.
 
 The investigator is bounded to four tool-calling rounds and three calls per response. Each provider request has a 35-second timeout; the provider's minimum retry setting is 1. Runs have a 150-second overall deadline and two active execution slots per runtime instance. The reviewer has no tool provider or shared conversation memory. Expired/interrupted runs recover to failed status when read, and approvals recover against persisted follow-up records. There is no automatic retry of the whole agent workflow.
 
-For higher-quality local answers, pre-pull a larger tool-capable model and rehearse it on your actual Mac before changing `LLM_MODEL`. Rehearsal mode remains available without Ollama.
+For higher-quality local answers, pre-pull a larger tool-capable model and rehearse it on your actual Mac before changing `LLM_MODEL`. Rehearsal mode remains available without a model or API key.
 
 ## Commands and verification
 
@@ -151,12 +161,20 @@ Gateway metric: `runway_gateway_requests_total`, tagged only by decision and pri
 - **Java cannot be found:** set `JAVA_HOME` to a JDK 25, not macOS's `/usr/bin/java` launcher.
 - **Podman cannot connect:** `podman machine start`; inspect `podman system connection list`. Existing unrelated containers are never stopped.
 - **Port 8090 is occupied:** stop the process using it or change the loopback mapping in `demo.sh`. Do not kill unrelated services.
-- **Model not found / failed live run:** confirm `ollama list`, the exact `LLM_MODEL` name and the container-visible base URL. Use rehearsal during the presentation if inference fails; it is labeled honestly.
+- **Model not found / failed live run:** confirm `OPENAI_API_KEY` is exported before startup, API access/billing, the exact `LLM_MODEL` and the base URL. After changing credentials, recreate the runtime with `./demo.sh up --skip-build`. For optional Ollama, check `ollama list`. Use rehearsal during the presentation if inference fails; it is labeled honestly.
 - **429 after many probes/runs:** the gateway allows 60 requests per minute per principal. Wait for the next minute before retrying.
 - **401 after restart:** re-copy `./demo.sh credentials`. The SPA deliberately does not persist its access key.
 - **Database login fails after editing `.env`:** the existing volume retains the original database password. Restore it or rotate the PostgreSQL role password explicitly; changing an environment variable does not rotate a database password.
 - **Data reset:** data is retained intentionally. To start a clean dataset, stop/remove only this project's containers and explicitly remove `runway-data`; that deletes all demo history. `down` does not delete data.
 - **Maven module-only dev launch cannot resolve `shared`:** first run `./mvnw install -DskipTests` from the root. For live coding, keep the packaged demo running and use a separate development port with explicit local dependencies/configuration.
+
+## Daily dependency updates
+
+[Dependabot](.github/dependabot.yml) checks Maven dependencies **every day at 06:00 America/New_York**, including weekends. Quarkus platform/core and Quarkiverse extensions (including LangChain4j and MCP Server) are grouped so related upgrades can be tested together. Patch, minor and major releases are eligible; incompatible groups remain open when verification fails.
+
+[Automatic merging](.github/workflows/dependabot-automerge.yml) runs only after a successful **Verify** pull-request workflow for the PR's current commit. It verifies Dependabot ownership, the source repository/branch, and that every changed file is an existing `pom.xml`. The merge uses an exact commit guard to reject a newer, untested head. The privileged workflow never checks out PR code. Repository auto-merge and squash merging must be enabled (configured on `danieloh30/enterprise-ai-runway`). Existing branch protection requirements are respected.
+
+These checks cover the Java tests, packaging and syntax validation in CI; a green build does not replace a live model/DataPower integration rehearsal. Review the next demo before presenting an upgraded stack.
 
 ## Version and reference notes
 

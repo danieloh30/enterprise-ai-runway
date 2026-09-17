@@ -60,7 +60,7 @@ async function connect() {
   $('#model-pill').classList.toggle('green', status.modelReady);
   $('#model-pill').classList.toggle('amber', !status.modelReady);
   incidentChanged();
-  if (!status.modelReady) toast('Model availability could not be confirmed. Check Ollama or use rehearsal mode.');
+  if (!status.modelReady) toast('Model availability could not be confirmed. Check the server API key and model settings, or use rehearsal mode.');
 }
 function incidentChanged() {
   const incident = state.incidents.find((i) => i.id === $('#incident').value);

@@ -1,0 +1,27 @@
+version: 2
+updates:
+  - package-ecosystem: maven
+    directory: /
+    schedule:
+      # Dependabot's "daily" interval excludes weekends; cron runs all seven days.
+      interval: cron
+      cronjob: "0 6 * * *"
+      timezone: America/New_York
+    open-pull-requests-limit: 5
+    allow:
+      - dependency-name: "io.quarkus*:*"
+      - dependency-name: "io.quarkiverse.*:*"
+    groups:
+      quarkus-stack:
+        applies-to: version-updates
+        patterns:
+          - "io.quarkus*:*"
+          - "io.quarkiverse.*:*"
+      quarkus-security:
+        applies-to: security-updates
+        patterns:
+          - "io.quarkus*:*"
+          - "io.quarkiverse.*:*"
+    commit-message:
+      prefix: build
+      include: scope

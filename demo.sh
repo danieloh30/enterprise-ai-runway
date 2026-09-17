@@ -9,9 +9,9 @@ init() {
       printf '%s=%s\n' "$key" "$(openssl rand -hex 24)" >> .env
     done
     cat >> .env <<'ENV'
-LLM_BASE_URL=http://host.containers.internal:11434/v1
-LLM_MODEL=llama3.2:latest
-LLM_API_KEY=ollama
+# Export OPENAI_API_KEY before ./demo.sh up for live AI.
+LLM_BASE_URL=https://api.openai.com/v1
+LLM_MODEL=gpt-4.1-mini
 GATEWAY_KIND='Local policy simulator'
 ENV
     printf 'Created .env with unique local credentials.\n'
@@ -75,7 +75,7 @@ up() {
   podman run -d --name runway-agent --network runway-net --label app=enterprise-ai-runway \
     --read-only --tmpfs /tmp:rw,size=64m --cap-drop=all --security-opt=no-new-privileges --memory=768m \
     -p 127.0.0.1:8090:8090 -e DB_URL -e DB_USER -e DB_PASSWORD -e DEMO_API_KEY -e GATEWAY_READ_KEY -e GATEWAY_WRITE_KEY \
-    -e LLM_BASE_URL -e LLM_MODEL -e LLM_API_KEY -e GATEWAY_KIND \
+    -e OPENAI_API_KEY -e LLM_BASE_URL -e LLM_MODEL -e LLM_API_KEY -e GATEWAY_KIND \
     -e MCP_GATEWAY_URL="${MCP_GATEWAY_URL:-http://policy-gateway:8091}" localhost/runway-agent-runtime:local >/dev/null
   wait_http runway-agent 8090
   printf '\nDemo ready: http://localhost:8090\nPresenter key: %s\n\n' "$DEMO_API_KEY"

@@ -13,3 +13,11 @@ Verified locally on 2026-09-16 on an Apple Silicon Mac with Temurin Java 25.0.1,
 The verification process caught an API authentication path-normalization bug, corrected it, and verified the regression with HTTP-level tests before publication.
 
 The native laptop uses a local policy simulator. No actual IBM DataPower appliance, IBM Bob IDE interaction, Kubernetes cluster, organization OIDC issuer, load test or model safety evaluation was available as part of this verification. Deployment references document the required integration work. The SPA's blueprint generation is explicitly template based; rehearsal mode is explicitly non-LLM.
+
+## OpenAI defaults and dependency automation
+
+The default provider was subsequently changed to OpenAI `gpt-4.1-mini`, with server-side `OPENAI_API_KEY` configuration and an optional `LLM_API_KEY` override. `./mvnw -B verify` passed with 13 Java tests, including rejection of live requests without a model credential and continued acceptance of rehearsal requests. No OpenAI key was available in the verification environment, so a live OpenAI request has **not** been verified. The earlier live execution result above used Ollama.
+
+The actual inline Dependabot merge script passed 19 Node.js regression cases: the eligible PR path plus rejection of failed/superseded runs, untested heads, forks, incorrect authors/branches, non-POM changes and other ineligible cases. All workflow YAML files parsed, and frontend/launcher syntax checks passed. The workflow is configured to merge only after a successful Verify run for the current PR commit; a real Dependabot upgrade has not yet exercised the merge end to end.
+
+All running containers were stopped at the presenter's request. These follow-up checks did not start any containers.

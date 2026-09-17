@@ -26,3 +26,5 @@ jobs:
           node --check agent-runtime/src/main/resources/META-INF/resources/app.js
           bash -n demo.sh
           python3 -m py_compile scripts/smoke.py
+      - name: Test dependency merge safeguards
+        run: node --test tests/dependabot-automerge.test.cjs

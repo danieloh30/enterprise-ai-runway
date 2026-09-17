@@ -25,6 +25,12 @@ class DemoResourceTest {
   given().header("Authorization",AUTH).contentType("application/json").body("{\"incidentId\":\"INC-2042\",\"mode\":\"rehearsal\",\"prompt\":\"Investigate\"}")
    .post("/api/runs").then().statusCode(202).header("Location","/api/runs/"+id).body("id",is(id.toString()));
  }
+ @Test void missingModelCredentialRejectsLiveBeforeStartingRun(){
+  given().header("Authorization",AUTH).contentType("application/json")
+   .body(Map.of("incidentId","INC-2042","mode","live","prompt","Investigate"))
+   .post("/api/runs").then().statusCode(503).body("error",containsString("OPENAI_API_KEY"));
+  verifyNoInteractions(runs);
+ }
  @Test void blueprintDeclaresTemplateOriginAndDoesNotEchoSecrets(){
   given().header("Authorization",AUTH).contentType("application/json").body(Map.of("prompt","Build a safe incident agent"))
    .post("/api/blueprint").then().statusCode(200).body("generator",containsString("templates"))
