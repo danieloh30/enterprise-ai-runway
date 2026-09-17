@@ -34,7 +34,7 @@ Only the SPA/API port is published, bound to `127.0.0.1`. PostgreSQL, the gatewa
 
 | Component | Behavior |
 |---|---|
-| Quarkus agents | Real LangChain4j AI services. The investigator uses an MCP tool provider; the reviewer has no tools. |
+| Agents | Java agents using Quarkus LangChain4j. The investigator uses an MCP tool provider; the reviewer has no tools. |
 | Enterprise data | Real PostgreSQL reads/writes with explicitly **seeded** incidents and telemetry. No connection to production systems. |
 | Local gateway | A **Quarkus policy simulator**, not IBM DataPower. It enforces authentication, role-specific allowlists, argument validation, rate limits and persisted decision audit. |
 | IBM Bob stage | The SPA assembles deterministic blueprint templates and a handoff prompt. Run that prompt in your actual IBM Bob IDE session for AI-generated code changes. The SPA does not claim to invoke Bob. |
