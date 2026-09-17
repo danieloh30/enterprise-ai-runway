@@ -60,6 +60,13 @@ Detailed narration and recovery cues: [presenter runbook](docs/demo-runbook.md).
 ## Architecture
 
 ```mermaid
+---
+config:
+  look: handDrawn
+  theme: neutral
+  themeVariables:
+    fontFamily: "'Comic Sans MS', 'Comic Sans', cursive"
+---
 flowchart LR
     Bob[IBM Bob in IDE] -. generates/reviews code .-> Runtime
     UI[Runway SPA] -->|Presenter key or OIDC token| Runtime[Quarkus runtime]
