@@ -63,24 +63,74 @@ Detailed narration and recovery cues: [presenter runbook](docs/demo-runbook.md).
 ---
 config:
   look: handDrawn
-  theme: neutral
+  theme: base
+  handDrawnSeed: 42
+  fontFamily: Arial
+  flowchart:
+    curve: basis
+    nodeSpacing: 35
+    rankSpacing: 65
+    wrappingWidth: 230
+    subGraphTitleMargin:
+      top: 12
+      bottom: 28
   themeVariables:
-    fontFamily: "'Comic Sans MS', 'Comic Sans', cursive"
+    fontFamily: Arial
+    fontSize: 20px
+    primaryTextColor: '#37474f'
+    lineColor: '#45545b'
+    edgeLabelBackground: '#ffffff'
+    clusterBkg: '#f7f6f2'
+    clusterBorder: '#918b7d'
 ---
-flowchart LR
-    Bob[IBM Bob in IDE] -. generates/reviews code .-> Runtime
-    UI[Runway SPA] -->|Presenter key or OIDC token| Runtime[Quarkus runtime]
-    Runtime --> Investigator[Investigator AI service]
-    Investigator <-->|Tool calling| LLM[OpenAI API / optional compatible provider]
-    Investigator -->|Read-only MCP credential| Gateway[Policy gateway / DataPower boundary]
-    Runtime --> Reviewer[Reviewer AI service: no tools]
-    Reviewer <-->|Risk review| LLM
-    Runtime -->|Human-approved write credential| Gateway
-    Gateway -->|Private backend credential| Tools[Quarkus MCP tools]
-    Tools -->|Parameterized SQL| DB[(PostgreSQL)]
-    Runtime -->|Run state and approval records| DB
-    Gateway -->|Decision audit| DB
+flowchart TB
+    UI(["Incident investigation<br/>Runway SPA"])
+    Bob(["IBM Bob in the IDE<br/>Code generation"])
+
+    subgraph Runtime["Quarkus runtime · :8090"]
+        Workflow(["RunService<br/>Investigation workflow"])
+        Investigator(["InvestigatorAgent<br/>@RegisterAiService<br/>@McpToolBox"])
+        Reviewer(["ReviewerAgent<br/>Independent review<br/>No tools"])
+        Approval(["Human approval gate<br/>Approve / reject"])
+
+        Workflow -->|1 · Investigate| Investigator
+        Workflow -->|2 · Review| Reviewer
+        Workflow -->|3 · Human decision| Approval
+    end
+
+    UI -->|Key / OIDC| Workflow
+    Bob -.->|Development time| Workflow
+    Investigator <-->|Tool calling| Model
+    Reviewer <-->|Risk review| Model
+    Model(["OpenAI API<br/>Model inference"])
+
+    subgraph Governed["Governed MCP path"]
+        direction LR
+        Gateway(["Policy gateway · :8091<br/>Enforce · protect · audit"])
+        Tools(["MCP tools · :8092<br/>Read evidence<br/>Create follow-up"])
+        DB[("PostgreSQL<br/>Seeded enterprise data")]
+        Gateway -->|Backend auth| Tools
+        Tools -->|SQL| DB
+    end
+
+    Investigator -->|Read-only MCP| Governed
+    Approval -->|Approved write| Governed
+
+    classDef entry fill:#e8e0cb,stroke:#80745d,color:#37474f,stroke-width:1.5px;
+    classDef agent fill:#dcecf5,stroke:#477995,color:#37474f,stroke-width:1.5px;
+    classDef review fill:#e2efd9,stroke:#59854d,color:#37474f,stroke-width:1.5px;
+    classDef approval fill:#fce7d2,stroke:#bd874b,color:#37474f,stroke-width:1.5px;
+    classDef tools fill:#fff4cc,stroke:#bea237,color:#37474f,stroke-width:1.5px;
+    classDef external fill:#f4dcdc,stroke:#aa5454,color:#37474f,stroke-width:1.5px;
+    class UI,Bob entry;
+    class Workflow,Investigator agent;
+    class Reviewer,DB review;
+    class Approval,Gateway approval;
+    class Tools tools;
+    class Model external;
 ```
+
+The numbered branches show the workflow stages in order: investigation, independent review, then a human decision. The runtime also persists run state and approval records in PostgreSQL, and the gateway persists its decision audit there. The local policy gateway is a Quarkus simulator; IBM DataPower can replace that boundary using the [integration guide](deploy/datapower/README.md).
 
 The runtime gathers three baseline evidence records before invoking the investigator, so the reviewer also receives independently collected observations. These baseline calls are distinguished from the agent's own dynamic calls in the execution trace. The gateway decision log contains both. Tool results and model output are treated as untrusted content and rendered as text in the SPA.
 
