@@ -59,7 +59,7 @@ public class DemoResource {
                 String investigate(@V("runId") UUID runId, @V("message") @UserMessage String message);
             }
             """;
-        String bob="In this Java 25 / Quarkus 3.39.3 Maven project, inspect the three services and existing tests. "+request.prompt()
+        String bob="Inspect this Quarkus Maven reactor and its existing tests. Use the Java release and Quarkus platform version configured in the root pom.xml, and resolve extension versions from the project's POMs and imported BOMs. Work with those pinned versions and use ./mvnw for build and verification commands. "+request.prompt()
             +" Use the existing @Agent methods and @SequenceAgent workflow. Keep all agent tool calls behind the MCP gateway. Expose only parameterized, bounded read tools to the investigator. Preserve separate human approval and idempotency for writes. Add meaningful tests, update README, and explain the changes before applying them. Do not use real credentials or bypass gateway policy.";
         return Map.of("generator","Deterministic project templates — use the included prompt in IBM Bob for AI code generation",
             "prompt",request.prompt(),"bobPrompt",bob,"files",Map.of("application.properties",config,"InvestigatorAgent.java",java),
