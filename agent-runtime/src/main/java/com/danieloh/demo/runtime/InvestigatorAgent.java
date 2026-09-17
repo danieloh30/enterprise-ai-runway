@@ -1,14 +1,13 @@
 package com.danieloh.demo.runtime;
 
 import dev.langchain4j.agentic.Agent;
+import dev.langchain4j.agentic.declarative.ChatMemoryProviderSupplier;
+import dev.langchain4j.memory.ChatMemory;
+import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 import dev.langchain4j.service.*;
-import io.quarkiverse.langchain4j.RegisterAiService;
 import io.quarkiverse.langchain4j.mcp.runtime.McpToolBox;
 import java.util.UUID;
 
-// @Agent generates the application-scoped bean; these settings bound tools and isolate memory.
-@RegisterAiService(chatMemoryProviderSupplier=RegisterAiService.NoChatMemoryProviderSupplier.class,
-    maxToolCallingRoundTrips=4, maxToolCallsPerResponse=3)
 public interface InvestigatorAgent {
     @SystemMessage("""
         You are an enterprise incident investigator. You have read-only MCP tools behind a policy gateway.
@@ -21,5 +20,11 @@ public interface InvestigatorAgent {
     @McpToolBox("enterprise")
     @Agent(name="investigator", description="Investigate an incident using read-only enterprise MCP tools", outputKey="finding")
     @RunStage
-    String investigate(@V("runId") UUID runId, @V("message") @UserMessage String message);
+    String investigate(@V("runId") UUID runId, @MemoryId Object memoryId, @V("message") @UserMessage String message);
+
+    // Each run gets its own tool-call history; RunStageInterceptor evicts it after the call.
+    @ChatMemoryProviderSupplier
+    static ChatMemory memory(Object memoryId) {
+        return MessageWindowChatMemory.builder().id(memoryId).maxMessages(32).build();
+    }
 }

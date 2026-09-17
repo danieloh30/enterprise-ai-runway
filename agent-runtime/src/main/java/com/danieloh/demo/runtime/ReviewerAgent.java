@@ -1,13 +1,12 @@
 package com.danieloh.demo.runtime;
 
 import dev.langchain4j.agentic.Agent;
+import dev.langchain4j.agentic.declarative.ChatMemoryProviderSupplier;
+import dev.langchain4j.memory.ChatMemory;
+import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 import dev.langchain4j.service.*;
-import io.quarkiverse.langchain4j.RegisterAiService;
 import java.util.UUID;
 
-// @Agent generates the application-scoped bean; explicitly disable tools and shared memory.
-@RegisterAiService(chatMemoryProviderSupplier=RegisterAiService.NoChatMemoryProviderSupplier.class,
-    toolProviderSupplier=RegisterAiService.NoToolProviderSupplier.class)
 public interface ReviewerAgent {
     @SystemMessage("""
         You are the independent risk reviewer for an incident investigation. You have no tools or authority to act.
@@ -22,5 +21,11 @@ public interface ReviewerAgent {
         """)
     @Agent(name="reviewer", description="Review the investigation against independently collected evidence", outputKey="report")
     @RunStage
-    String review(@V("runId") UUID runId, @V("evidence") String evidence, @V("finding") String finding);
+    // No @McpToolBox: the MCP integration supplies no tools to this method.
+    String review(@V("runId") UUID runId, @MemoryId Object memoryId, @V("evidence") String evidence, @V("finding") String finding);
+
+    @ChatMemoryProviderSupplier
+    static ChatMemory memory(Object memoryId) {
+        return MessageWindowChatMemory.builder().id(memoryId).maxMessages(32).build();
+    }
 }

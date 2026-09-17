@@ -1,11 +1,15 @@
 package com.danieloh.demo.runtime;
 
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
+import dev.langchain4j.agentic.agent.ChatMessagesAccess;
+import dev.langchain4j.agentic.scope.AgenticScope;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.UserMessage;
+import dev.langchain4j.invocation.LangChain4jManaged;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
+import dev.langchain4j.service.memory.ChatMemoryAccess;
 import io.quarkus.test.InjectMock;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
@@ -19,6 +23,7 @@ import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.IntStream;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -28,6 +33,8 @@ import static org.mockito.Mockito.*;
 @QuarkusTestResource(value=AgentMcpTestResource.class,restrictToAnnotatedClass=true)
 class InvestigationWorkflowTest {
     @Inject InvestigationWorkflow workflow;
+    @Inject InvestigatorAgent investigator;
+    @Inject ReviewerAgent reviewer;
     @InjectMock @MockitoConfig(convertScopes=true) ChatModel model;
     @InjectMock RunService runs;
 
@@ -36,9 +43,15 @@ class InvestigationWorkflowTest {
 
     @Test
     void sequenceCallsMcpThenReviewsIndependentEvidenceWithoutTools() {
-        when(model.chat(any(ChatRequest.class))).thenReturn(toolResponse(1),textResponse("Suspected database saturation"),textResponse("Reviewed report"));
+        var memoryId=new AtomicReference<Object>();
+        when(model.chat(any(ChatRequest.class))).thenAnswer(invocation -> {
+            memoryId.set(LangChain4jManaged.current(AgenticScope.class).memoryId());
+            assertNotNull(((ChatMemoryAccess)investigator).getChatMemory(memoryId.get()));
+            return toolResponse(1);
+        }).thenReturn(textResponse("Suspected database saturation"),textResponse("Reviewed report"));
         UUID id=UUID.randomUUID();
         assertEquals("Reviewed report",workflow.investigate(id,"Investigate INC-2042","Independent observation: p95 850ms"));
+        assertNoRetainedMemory(memoryId.get());
         assertEquals(List.of("get_incident"),AgentMcpTestResource.calls);
         var requests=ArgumentCaptor.forClass(ChatRequest.class);
         verify(model,times(3)).chat(requests.capture());
@@ -75,11 +88,14 @@ class InvestigationWorkflowTest {
     @Test
     void expiredRunStopsBeforeReviewer() {
         UUID id=UUID.randomUUID();
+        var memoryId=new AtomicReference<Object>();
         when(model.chat(any(ChatRequest.class))).thenAnswer(invocation -> {
+            memoryId.set(LangChain4jManaged.current(AgenticScope.class).memoryId());
             doThrow(new IllegalStateException("Run no longer active")).when(runs).checkRunning(id);
             return textResponse("Investigator finished after the deadline");
         });
         assertThrows(RuntimeException.class,() -> workflow.investigate(id,"Investigate INC-2042","Evidence"));
+        assertNoRetainedMemory(memoryId.get());
         verify(model,times(1)).chat(any(ChatRequest.class));
         verify(runs,never()).event(any(),eq("reviewer"),anyString(),anyString());
     }
@@ -97,6 +113,31 @@ class InvestigationWorkflowTest {
         }
         assertTrue(userText(requests.getAllValues().getLast()).contains("Second finding"));
         assertTrue(userText(requests.getAllValues().getLast()).contains("Second evidence"));
+    }
+
+    @Test
+    void modelFailureEvictsMemoryBeforeTheRunIdIsReused() {
+        UUID id=UUID.randomUUID();
+        var memoryId=new AtomicReference<Object>();
+        when(model.chat(any(ChatRequest.class))).thenAnswer(invocation -> {
+            memoryId.set(LangChain4jManaged.current(AgenticScope.class).memoryId());
+            assertNotNull(((ChatMemoryAccess)investigator).getChatMemory(memoryId.get()));
+            throw new IllegalStateException("Model unavailable");
+        });
+        assertThrows(RuntimeException.class,() -> workflow.investigate(id,"First confidential incident","First evidence"));
+        assertNoRetainedMemory(memoryId.get());
+        reset(model);
+        when(model.chat(any(ChatRequest.class))).thenAnswer(invocation -> {
+            memoryId.set(LangChain4jManaged.current(AgenticScope.class).memoryId());
+            return textResponse("Second finding");
+        }).thenReturn(textResponse("Second report"));
+        assertEquals("Second report",workflow.investigate(id,"Second incident","Second evidence"));
+        assertNoRetainedMemory(memoryId.get());
+        var requests=ArgumentCaptor.forClass(ChatRequest.class);
+        verify(model,times(2)).chat(requests.capture());
+        for(ChatRequest request:requests.getAllValues()) {
+            assertFalse(request.messages().toString().contains("First"));
+        }
     }
 
     @Test
@@ -126,6 +167,14 @@ class InvestigationWorkflowTest {
             assertEquals("alpha report",alpha.get(10,TimeUnit.SECONDS));
             assertEquals("beta report",beta.get(10,TimeUnit.SECONDS));
         }
+    }
+
+    private void assertNoRetainedMemory(Object id) {
+        assertNotNull(id);
+        assertNull(((ChatMemoryAccess)investigator).getChatMemory(id));
+        assertNull(((ChatMemoryAccess)reviewer).getChatMemory(id));
+        assertNull(((ChatMessagesAccess)investigator).lastChatRequest(id));
+        assertNull(((ChatMessagesAccess)reviewer).lastChatRequest(id));
     }
 
     private static ChatResponse textResponse(String text) {return ChatResponse.builder().aiMessage(AiMessage.from(text)).build();}

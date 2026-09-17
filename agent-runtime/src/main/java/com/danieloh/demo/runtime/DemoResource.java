@@ -47,16 +47,19 @@ public class DemoResource {
         return db.query("SELECT json_build_object('id',id,'service',service,'severity',severity,'summary',summary,'status',status) FROM incidents ORDER BY id");
     }
     @POST @Path("/blueprint") public Map<String,Object> blueprint(@Valid @NotNull BlueprintRequest request) {
-        String config="quarkus.langchain4j.mcp.enterprise.transport-type=streamable-http\nquarkus.langchain4j.mcp.enterprise.url=${MCP_GATEWAY_URL}/mcp\nquarkus.langchain4j.mcp.enterprise.header.Authorization=Bearer ${GATEWAY_READ_KEY}\n";
+        String config="quarkus.langchain4j.ai-service.max-tool-calling-round-trips=4\nquarkus.langchain4j.ai-service.max-tool-executions=${quarkus.langchain4j.ai-service.max-tool-calling-round-trips}\nquarkus.langchain4j.ai-service.max-tool-calls-per-response=3\nquarkus.langchain4j.mcp.enterprise.transport-type=streamable-http\nquarkus.langchain4j.mcp.enterprise.url=${MCP_GATEWAY_URL}/mcp\nquarkus.langchain4j.mcp.enterprise.header.Authorization=Bearer ${GATEWAY_READ_KEY}\n";
         String java="""
-            @RegisterAiService(maxToolCallingRoundTrips = 4, maxToolCallsPerResponse = 3,
-                chatMemoryProviderSupplier = RegisterAiService.NoChatMemoryProviderSupplier.class)
             public interface InvestigatorAgent {
                 @SystemMessage("Investigate using verified evidence. Human approval is required for actions.")
                 @McpToolBox("enterprise")
                 @Agent(name = "investigator", description = "Investigate using read-only MCP tools", outputKey = "finding")
                 @RunStage
-                String investigate(@V("runId") UUID runId, @V("message") @UserMessage String message);
+                String investigate(@V("runId") UUID runId, @MemoryId Object memoryId, @V("message") @UserMessage String message);
+
+                @ChatMemoryProviderSupplier
+                static ChatMemory memory(Object memoryId) {
+                    return MessageWindowChatMemory.builder().id(memoryId).maxMessages(32).build();
+                }
             }
             """;
         String bob="Inspect this Quarkus Maven reactor and its existing tests. Use the Java release and Quarkus platform version configured in the root pom.xml, and resolve extension versions from the project's POMs and imported BOMs. Work with those pinned versions and use ./mvnw for build and verification commands. "+request.prompt()
