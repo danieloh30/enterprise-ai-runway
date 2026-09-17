@@ -138,6 +138,22 @@ flowchart TB
 
 The numbered branches show the workflow stages in order: investigation, independent review, then a human decision. The runtime also persists run state and approval records in PostgreSQL, and the policy service persists its decision audit there. `./demo.sh up` runs a real **IBM DataPower Gateway** container in front of the policy service; the agents call DataPower, which reverse-proxies MCP to the Quarkus policy service (see the [integration guide](deploy/datapower/README.md)). Set `GATEWAY_MODE=simulator` to run the policy service directly without the container.
 
+### How DataPower and the policy service relate
+
+DataPower sits **in front of** the policy service — it is a reverse proxy, not a peer that the policy service dials out to. In the default mode the MCP request path is:
+
+```
+agent-runtime  :8090
+  → IBM DataPower :8788      real datapower-limited container; terminates and forwards /mcp
+    → policy-gateway :8091   Quarkus policy service: authN/Z, role allowlists, rate limit, audit
+      → mcp-tools :8092      MCP tools
+        → PostgreSQL         seeded enterprise data
+```
+
+The DataPower hop is a **real IBM DataPower Gateway process**, not a dummy or in-code stub. `agent-runtime` opens its MCP connection to the container (`MCP_GATEWAY_URL=http://127.0.0.1:8788`); DataPower enforces its front-side handler limits and reverse-proxies `/mcp` verbatim to the backend, preserving `Authorization`, `Content-Type`, `Accept` and the `Mcp-*` headers and adding no `Origin`. The `policy-gateway` behind it is **also a real Quarkus service** that independently enforces the security policy (bearer keys, read/write scoping, argument validation, rate limiting, persisted audit) — it has no awareness of DataPower and simply serves the forwarded requests. It is labelled a "policy simulator" only because it stands in for enterprise API-management **policy logic** in one small service, not because the traffic or the checks are faked.
+
+With `GATEWAY_MODE=simulator`, no DataPower container starts and `agent-runtime` connects straight to `policy-gateway :8091`. The policy service still runs for real; only the gateway in front of it is absent.
+
 The runtime gathers three baseline evidence records before invoking the investigator, so the reviewer also receives independently collected observations. These baseline calls are distinguished from the agent's own dynamic calls in the execution trace. The gateway decision log contains both. Tool results and model output are treated as untrusted content and rendered as text in the SPA.
 
 The Agentic API is declared in [InvestigatorAgent](agent-runtime/src/main/java/com/danieloh/demo/runtime/agents/InvestigatorAgent.java), [ReviewerAgent](agent-runtime/src/main/java/com/danieloh/demo/runtime/agents/ReviewerAgent.java), and [InvestigationWorkflow](agent-runtime/src/main/java/com/danieloh/demo/runtime/workflow/InvestigationWorkflow.java). Both agents use `@Agent`; `@SequenceAgent` invokes the investigator and then the reviewer, passing `finding` through a fresh `AgenticScope` and returning `report`. Independent baseline `evidence` is a separate workflow input. The Agentic extension registers the generated agents with application scope; no explicit CDI scope annotation is needed on the interfaces.
