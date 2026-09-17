@@ -1,11 +1,35 @@
+# Build output
 **/target/
 **/.quarkus/
+**/.flattened-pom.xml
+
+# Local runtime and secrets
 .env
 .run/
-.DS_Store
-.idea/
 *.log
+
+# Node / Playwright
 node_modules/
 test-results/
 playwright-report/
+
+# Python
 **/__pycache__/
+
+# IDE / editor
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+.project
+.classpath
+.settings/
+.factorypath
+
+# OS / misc
+.DS_Store
+*.swp
+*.swo
+*.orig
+*.rej
