@@ -4,6 +4,8 @@
 
 The SPA walks through the slide's three ideas: design with IBM Bob, secure MCP traffic at a gateway, and run Quarkus / LangChain4j agents against enterprise tools. An incident investigator reads PostgreSQL evidence; an independent reviewer checks its conclusions; a human decides whether to create a follow-up task.
 
+![Runway desktop interface](docs/images/runway-ui.png)
+
 ## Start on an M4 Mac
 
 Install a **JDK 25**, **Podman**, and **Ollama**. Maven is supplied by the checked-in wrapper. Bash, OpenSSL and Python 3 are used by the launcher and smoke checks. Node.js is needed only for optional UI tests.
