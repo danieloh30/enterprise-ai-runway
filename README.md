@@ -22,15 +22,17 @@ export OPENAI_API_KEY="your-api-key"
 ./demo.sh up
 ```
 
-Open **http://localhost:8090**. The local launcher connects the SPA automatically—no presenter key to copy. Quarkus Dev Mode enables the same behavior by default. The browser receives a random runtime-session token; `.env` credentials, including `DEMO_API_KEY` and `OPENAI_API_KEY`, stay on the server. Reloading the page reconnects automatically.
+Leave this terminal open: `up` runs all three Quarkus applications in **Dev Mode** and streams their logs with service-name prefixes. Open **http://localhost:8090** when the launcher reports ready. The SPA connects automatically—no presenter key to copy. The browser receives a random runtime-session token; `.env` credentials, including `DEMO_API_KEY` and `OPENAI_API_KEY`, stay on the server. Reloading the page reconnects automatically.
+
+Edit Java/resources and refresh the browser to trigger live reload. Finish an investigation before editing code: a reload can interrupt an active run and renew the browser session. Dev UI is available at **http://localhost:8090/q/dev-ui**. Debugger ports are 5005 (runtime), 5006 (gateway), and 5007 (tools). Interactive console menus and continuous testing are disabled so the three services can share the terminal; run tests separately when needed. **Ctrl+C** stops all three applications and PostgreSQL while preserving history. `./demo.sh down` does the same from another terminal.
 
 To require manual entry locally, set `LOCAL_AUTO_CONNECT=false` in `.env` and restart. Retrieve the presenter key with `./demo.sh credentials`; it also remains available for scripts/API clients. The key or temporary session token is held only in browser memory, never local storage.
 
 The launcher detects an SDKMAN current JDK when `JAVA_HOME` is unset. For a standard macOS JDK installation use `export JAVA_HOME=$(/usr/libexec/java_home -v 25)`. If Java 25 is installed elsewhere, set `JAVA_HOME` to that JDK. `./mvnw -version` must report Java 25.
 
-The first build downloads dependencies and ARM64 container images. Allow 5–10 minutes **before** the presentation. The timed demo starts after the stack is ready. Reserve about 6 GB for the Podman VM. OpenAI runs inference remotely, so no local model download or GPU allocation is needed. Live AI requires internet connectivity and API access; rehearse once before presenting.
+The first start downloads Maven dependencies and the PostgreSQL container image. Allow 5–10 minutes **before** the presentation. The timed demo starts after the stack is ready. The three Quarkus applications run on the host; only PostgreSQL needs the Podman VM. OpenAI runs inference remotely, so no local model download or GPU allocation is needed. Live AI requires internet connectivity and API access; rehearse once before presenting.
 
-Only the SPA/API port is published, bound to `127.0.0.1`. PostgreSQL, the gateway and MCP tools are private to `runway-net`. Application containers run as UID 1001, with read-only root filesystems, dropped capabilities, resource limits and no privilege escalation. Only the agent runtime receives `OPENAI_API_KEY`; it calls OpenAI over HTTPS. The key is never sent to the SPA, gateway or MCP tools.
+All three HTTP services and the database’s dynamically assigned host port bind to `127.0.0.1`. The services share PostgreSQL in `runway-db`, backed by the persistent `runway-data` volume. When upgrading from the container launcher, `up` stops the old application containers and recreates the database container with a loopback port, retaining that volume. Packaged deployment references remain under `deploy/`; local Dev Mode does not exercise their container restrictions. Only the agent runtime receives `OPENAI_API_KEY`; it calls OpenAI over HTTPS. The key is never sent to the SPA, gateway or MCP tools.
 
 ## What is real in this demo?
 
@@ -142,7 +144,7 @@ Tool limits are configured in `application.properties` using `quarkus.langchain4
 
 [RunStageInterceptor](agent-runtime/src/main/java/com/danieloh/demo/runtime/RunStageInterceptor.java) checks persisted run status before and after each agent, records stage events, and evicts that agent's conversation in a `finally` block on success, failure, or cancellation. A timed-out or interrupted investigation cannot proceed to review. `RunService` owns the 150-second deadline, persistence, and approval endpoint. Human approval happens after the sequence returns and is required before the separate write credential can create a follow-up. Rehearsal mode bypasses the Agentic workflow and makes no model calls.
 
-| Module | Responsibility | Internal port |
+| Module | Responsibility | Local port |
 |---|---|---|
 | `agent-runtime` | SPA, API, two `@Agent` methods and their sequence, execution deadline, persisted history, human decisions | 8090 |
 | `policy-gateway` | MCP request policy, credential separation, rate limiter, tool discovery filtering, audit | 8091 |
@@ -163,12 +165,12 @@ LLM_MODEL=gpt-4.1-mini
 
 Both agents use **OpenAI by default**, through LangChain4j Chat Completions. [GPT-4.1 mini](https://developers.openai.com/api/docs/models/gpt-4.1-mini) supports function calling and suits the demo's short, bounded requests. Override `LLM_MODEL` to use another compatible model. Models with different temperature/reasoning requirements may need corresponding LangChain4j settings adjusted.
 
-The launcher forwards the shell's `OPENAI_API_KEY` only to the runtime container. You may also store it in the ignored, mode-0600 `.env` for local development. Keep cloud keys on the server, following [OpenAI authentication guidance](https://developers.openai.com/api/reference/overview#authentication). Without a model credential, Rehearsal still works and Live AI returns a clear 503 setup error before creating a run. Invalid/revoked keys and provider errors fail visibly; no canned response is substituted.
+The launcher forwards the shell's `OPENAI_API_KEY` only to the runtime process. You may also store it in the ignored, mode-0600 `.env` for local development. Keep cloud keys on the server, following [OpenAI authentication guidance](https://developers.openai.com/api/reference/overview#authentication). Without a model credential, Rehearsal still works and Live AI returns a clear 503 setup error before creating a run. Invalid/revoked keys and provider errors fail visibly; no canned response is substituted.
 
 For an optional native Ollama setup, run `ollama serve` and `ollama pull llama3.2:latest`, then change these settings in `.env`:
 
 ```properties
-LLM_BASE_URL=http://host.containers.internal:11434/v1
+LLM_BASE_URL=http://localhost:11434/v1
 LLM_MODEL=llama3.2:latest
 LLM_API_KEY=ollama
 ```
@@ -182,23 +184,25 @@ For higher-quality local answers, pre-pull a larger tool-capable model and rehea
 ## Commands and verification
 
 ```bash
-./demo.sh up                  # Maven verify, build images, start services
-./demo.sh up --skip-build     # rebuild images using existing Maven packages
-./demo.sh status
-./demo.sh logs                # runtime logs; Ctrl-C stops log tail only
-./demo.sh logs runway-gateway
-./demo.sh smoke               # full stack, rehearsal, real DB writes
-SMOKE_MODE=live ./demo.sh smoke  # also verifies actual model execution
-./demo.sh down                # stop only this project's containers; preserve data
+./demo.sh up                  # foreground Dev Mode, live reload and all service logs
+
+# In another terminal, while up is running:
+./demo.sh status              # dev launcher, service ports and database state
+./demo.sh smoke               # optional rehearsal flow check, with real DB writes
+SMOKE_MODE=live ./demo.sh smoke  # optional live model + full flow check
+./demo.sh down                # stop dev processes and database; preserve data
 
 ./mvnw verify                # Java tests and all service packages
+python3 -m unittest discover -s tests -p 'test_*.py'  # launcher lifecycle checks
 npm ci                       # optional frontend test dependency
 npx playwright install chromium
 npm run test:access          # isolated browser authentication checks; no services needed
 npm run test:ui              # requires running local stack and .env
 ```
 
-Smoke/UI checks create seeded runs and follow-up tasks; they intentionally remain in history. Unit/API tests use mocks where appropriate; the smoke suite exercises the actual packaged services and PostgreSQL. Test cases include unauthorized API access, invalid input, tool escalation, JSON/SSE tool filtering, rate limiting, OIDC approval roles, concurrent approval, retries and rejection. Agentic integration tests exercise the generated sequence with a mocked model and a local MCP server, covering evidence handoff, reviewer tool isolation, tool-call limits, cancellation, and isolation between runs. Tests do not call a paid model by default.
+Smoke checks are optional: Dev Mode compiles/reloads code, while smoke checks verify that the running services complete the whole demo flow together. They work with both dev and packaged services through HTTP. `up` does not run tests or smoke checks automatically. Logs stream in the `up` terminal and are also saved under the ignored `.run/` directory; there is no separate `logs` command. `--skip-build` is no longer needed or accepted.
+
+Smoke/UI checks create seeded runs and follow-up tasks; they intentionally remain in history. Unit/API tests use mocks where appropriate; the smoke suite exercises the actual running services and PostgreSQL. Test cases include unauthorized API access, invalid input, tool escalation, JSON/SSE tool filtering, rate limiting, OIDC approval roles, concurrent approval, retries and rejection. Agentic integration tests exercise the generated sequence with a mocked model and a local MCP server, covering evidence handoff, reviewer tool isolation, tool-call limits, cancellation, and isolation between runs. Tests do not call a paid model by default.
 
 The immutable `run_id` is also the unique key for the follow-up. A write requires a persisted approval timestamp and an eligible run state inside the MCP tool's SQL statement. A timeout after commit is reconciled by checking the database before retrying. The only supported write is creating a follow-up; there is no arbitrary SQL, shell command, restart or production remediation tool.
 
@@ -206,7 +210,7 @@ The immutable `run_id` is also the unique key for the follow-up. A write require
 
 All `/api/*` routes require a bearer credential. For local browsing, the SPA automatically obtains a temporary session through `POST /local-session`; scripts can still use `Authorization: Bearer <DEMO_API_KEY>`. A session lasts for the runtime process and is renewed after restart. It never grants access when local auto-connect is disabled or OIDC is enabled.
 
-Automatic connection is enabled in Quarkus Dev Mode and explicitly enabled by `./demo.sh up`, which publishes only on `127.0.0.1`. Other packaged deployments default to disabled. The session endpoint requires a literal loopback hostname, a matching `Origin`, same-origin fetch metadata and the SPA's custom header; foreign origins are rejected. Keep this convenience limited to a trusted local machine, and never expose an enabled instance through a public proxy. Set `LOCAL_AUTO_CONNECT=false` for shared/deployed environments.
+Automatic connection is enabled in Quarkus Dev Mode, including `./demo.sh up`, which binds services to `127.0.0.1`. Packaged deployments default to disabled. The session endpoint requires a literal loopback hostname, a matching `Origin`, same-origin fetch metadata and the SPA's custom header; foreign origins are rejected. Keep this convenience limited to a trusted local machine, and never expose an enabled instance through a public proxy. Set `LOCAL_AUTO_CONNECT=false` for shared/deployed environments.
 
 With OIDC enabled, tokens must have `groups: [presenter]`; approve/reject additionally require `approver`. OIDC always disables local-session issuance, even if the local flag is true. This is a shared presenter workspace, not a multi-tenant application.
 
@@ -231,13 +235,13 @@ Gateway metric: `runway_gateway_requests_total`, tagged only by decision and pri
 
 - **Java cannot be found:** set `JAVA_HOME` to a JDK 25, not macOS's `/usr/bin/java` launcher.
 - **Podman cannot connect:** `podman machine start`; inspect `podman system connection list`. Existing unrelated containers are never stopped.
-- **Port 8090 is occupied:** stop the process using it or change the loopback mapping in `demo.sh`. Do not kill unrelated services.
-- **Model not found / failed live run:** confirm `OPENAI_API_KEY` is exported before startup, API access/billing, the exact `LLM_MODEL` and the base URL. After changing credentials, recreate the runtime with `./demo.sh up --skip-build`. For optional Ollama, check `ollama list`. Use rehearsal during the presentation if inference fails; it is labeled honestly.
+- **A service/debug port is occupied:** the launcher reports the conflicting port. Stop your previous demo with `./demo.sh down`, or stop the owning application before retrying. The launcher never kills processes based on port numbers.
+- **Model not found / failed live run:** confirm `OPENAI_API_KEY` is exported before startup, API access/billing, the exact `LLM_MODEL` and the base URL. After changing credentials, stop the demo and run `./demo.sh up` again. For optional Ollama, check `ollama list`. Use rehearsal during the presentation if inference fails; it is labeled honestly.
 - **429 after many probes/runs:** the gateway allows 60 requests per minute per principal. Wait for the next minute before retrying.
 - **401 after restart:** local browser sessions renew automatically. Reload the page if a request raced with startup. In manual mode, re-copy `./demo.sh credentials`. If automatic connection is unavailable, use `localhost` directly and check `LOCAL_AUTO_CONNECT`; OIDC deployments require their configured identity provider.
 - **Database login fails after editing `.env`:** the existing volume retains the original database password. Restore it or rotate the PostgreSQL role password explicitly; changing an environment variable does not rotate a database password.
 - **Data reset:** data is retained intentionally. To start a clean dataset, stop/remove only this project's containers and explicitly remove `runway-data`; that deletes all demo history. `down` does not delete data.
-- **Maven module-only dev launch cannot resolve `shared`:** first run `./mvnw install -DskipTests` from the root. For live coding, keep the packaged demo running and use a separate development port with explicit local dependencies/configuration.
+- **Maven module-only dev launch cannot resolve `shared`:** `./demo.sh up` installs the shared library and parent automatically. For a manual launch, first run `./mvnw -pl shared -am install -DskipTests` from the root, then supply database URLs and credentials to each service.
 
 ## Daily dependency updates
 

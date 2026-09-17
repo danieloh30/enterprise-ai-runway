@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""End-to-end checks against the packaged stack. Uses only Python's standard library."""
+"""Optional end-to-end checks against a running stack (dev or packaged); standard library only."""
 import concurrent.futures, json, os, time, urllib.request, urllib.error
 BASE=os.environ.get('DEMO_URL','http://localhost:8090')
 KEY=os.environ['DEMO_API_KEY']
@@ -58,4 +58,4 @@ code,audit=request('/api/audit');assert code==200
 assert any(a['decision']=='DENY' and a['status']==403 for a in audit)
 assert any(a['tool']=='create_followup' and a['decision']=='ALLOW' for a in audit)
 print('PASS: policy decisions persist in the audit log')
-print('All packaged-stack smoke checks passed.')
+print('All demo-flow smoke checks passed.')

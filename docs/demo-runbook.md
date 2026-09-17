@@ -1,6 +1,6 @@
 # Presenter runbook
 
-Do the first container build and configure `OPENAI_API_KEY` before the session. The default provider is OpenAI; a model download is needed only for optional Ollama. Run `./demo.sh smoke` and `SMOKE_MODE=live ./demo.sh smoke`, then open the SPA; the local browser connects automatically. Leave the app running; the timer is presentation guidance, not a shutdown clock.
+Configure `OPENAI_API_KEY` and run `./demo.sh up` before the session. Leave that terminal open for Quarkus Dev Mode logs and live reload. The default provider is OpenAI; a model download is needed only for optional Ollama. Optionally run `./demo.sh smoke` and `SMOKE_MODE=live ./demo.sh smoke` in a second terminal to verify the complete flow, then open the SPA; the local browser connects automatically. Leave the app running; the timer is presentation guidance, not a shutdown clock.
 
 ## Opening — 1 minute
 
@@ -40,5 +40,5 @@ Show the Java interfaces, `GatewayPolicy` and the `create_followup` SQL guard. E
 - Live timeout: failed runs remain visible. Start a new rehearsal run; never silently substitute a canned AI answer.
 - Stale browser/session: reload the page or click the gear to reconnect automatically. If manual mode is enabled, retrieve `./demo.sh credentials` and enter the key.
 - Too many requests: wait until the next minute. Do not raise limits during the security explanation.
-- Gateway unavailable: use `./demo.sh logs runway-gateway`; do not bypass it with direct tool calls.
-- Avoid a surprise reset: `./demo.sh down` keeps the database volume and all history.
+- Gateway unavailable: check the `[policy-gateway]` output in the `./demo.sh up` terminal; do not bypass it with direct tool calls.
+- Avoid a surprise reset: Ctrl+C in the launcher or `./demo.sh down` stops the demo and keeps the database volume and all history. Finish active investigations before triggering live reload.

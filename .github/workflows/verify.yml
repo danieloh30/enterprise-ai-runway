@@ -25,7 +25,9 @@ jobs:
         run: |
           node --check agent-runtime/src/main/resources/META-INF/resources/app.js
           bash -n demo.sh
-          python3 -m py_compile scripts/smoke.py
+          python3 -m py_compile scripts/smoke.py scripts/dev.py
+      - name: Verify dev launcher lifecycle
+        run: python3 -m unittest discover -s tests -p 'test_*.py'
       - name: Test dependency merge safeguards
         run: node --test tests/dependabot-automerge.test.cjs
       - name: Verify local browser access

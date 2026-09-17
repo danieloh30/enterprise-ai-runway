@@ -27,3 +27,19 @@ All running containers were stopped at the presenter's request. These follow-up 
 `./mvnw -B verify` passed with 19 Java tests after adding temporary local presenter sessions. HTTP-level tests cover session issuance, API authentication, disabled packaged defaults, and rejected cross-origin/simple requests. Unit tests cover OIDC disabling the feature, loopback hostname restrictions and invalidation after a runtime restart.
 
 `npm run test:access` passed four isolated Chromium tests covering automatic connection/reload, manual-mode fallback, visible backend failure and renewal after an expired session. These browser tests use mocked API responses and need neither containers nor an OpenAI key. The full PostgreSQL/model workflow was not rerun for this access change. The local launcher and Quarkus Dev Mode enable automatic connection; other packaged deployments require explicit opt-in.
+
+
+## Quarkus Dev Mode launcher
+
+Verified on 2026-09-17 on the same Apple Silicon Mac after changing `./demo.sh up` to foreground Dev Mode:
+
+- All three services reported the dev profile and live coding, with separate HTTP/debug ports and labeled logs in one terminal.
+- The old PostgreSQL container was replaced with a loopback port while retaining `runway-data`. Restarting the launcher retained the earlier smoke-test follow-up.
+- `./demo.sh smoke` and `SMOKE_MODE=live ./demo.sh smoke` both passed against the dev-mode services. The live check used the configured OpenAI endpoint and actual investigator/reviewer execution; this supersedes the earlier unverified OpenAI result above.
+- Java source changes were compiled and served without restarting the launcher. The temporary verification endpoint was removed afterward.
+- `npm run test:ui`: both Chromium tests passed against Dev Mode, including automatic local connection, the complete rehearsal/approval flow, history, and mobile navigation.
+- Both `./demo.sh down` from another terminal and Ctrl+C shut down all three applications and PostgreSQL. Status then showed the launcher stopped and all three HTTP ports closed. A duplicate `up` was rejected while the original launcher remained running.
+- `./mvnw -B verify`: 26 Java tests passed and all service packages built.
+- Five Python lifecycle tests passed, covering forked child cleanup, unrelated process preservation, startup failure logs, stop requests, and refusing to stop an unowned container. Bash/Python syntax checks and the 19 dependency-merge safeguard tests also passed.
+
+Smoke checks remain optional HTTP checks of the running flow. Dev Mode does not run them automatically. The demo was stopped after verification; its history remains in the database volume.
