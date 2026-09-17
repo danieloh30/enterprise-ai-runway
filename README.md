@@ -149,11 +149,19 @@ Tool limits are configured in `application.properties` using `quarkus.langchain4
 | `agent-runtime` | SPA, API, two `@Agent` methods and their sequence, execution deadline, persisted history, human decisions | 8090 |
 | `policy-gateway` | MCP request policy, credential separation, rate limiter, tool discovery filtering, audit | 8091 |
 | `mcp-tools` | MCP tools, Flyway schema migrations, database-backed operations | 8092 |
-| `shared` | Small JDBC and constant-time credential utilities | — |
+| `shared` | JDBC utilities, constant-time credential checks, and common configuration | — |
 
 MCP is **Streamable HTTP**, request/response subset; GET subsidiary streams and legacy SSE transport are not proxied. The server enables per-request auto-initialization for explicit orchestration/probe calls. The LangChain4j client also performs normal initialization. Both JSON and SSE-framed POST responses are handled. `tools/list` hides write tools from the investigator; the gateway still denies direct attempts to call them.
 
 The runtime Java code is grouped into `agents/`, `workflow/`, `api/`, `security/`, and `gateway/`. Tests mirror those packages, with MCP test fixtures in `support/`. See the [runtime source map](agent-runtime/README.md) to find each class.
+
+## Configuration layout
+
+Each service’s `application.properties` contains its own ports, identity, API/model settings, and credentials. Shared datasource settings, HTTP limits, response headers, and log formatting live once in [shared configuration](shared/src/main/resources/META-INF/microprofile-config.properties). Quarkus loads this standard MicroProfile configuration from the shared dependency; service properties and environment variables can override it.
+
+The demo runs the applications in **Dev Mode**, while `demo.sh` manages one persistent PostgreSQL database for all three services. The runtime, gateway audit, and MCP tools must see the same run and approval records. The explicit JDBC URL selects that shared database and automatically suppresses database Dev Services. The PostgreSQL driver supplies the database kind, so neither a `db-kind` setting nor an explicit Dev Services disable flag is needed in the application configuration. The eight-connection pool and five-second acquisition timeout remain deliberate limits.
+
+[Compose Dev Services](https://quarkus.io/guides/compose-dev-services/) can also coordinate a shared database, but that requires shared project/lifecycle and persistent-volume configuration; simply deleting the connection settings would not preserve this demo’s data flow. The current launcher retains database history across restarts and `down`.
 
 ## Models and configuration
 
@@ -255,7 +263,7 @@ These checks cover the Java tests, packaging and syntax validation in CI; a gree
 
 ## Version and reference notes
 
-Quarkus **3.39.3** was the latest stable release verified on **2026-09-16**. PostgreSQL is pinned to the current 17.x patch, **17.11**. Extension versions are pinned: Quarkus LangChain4j **1.13.1**, MCP Server **2.0.1**. This project deliberately targets JVM Java 25; it does not claim a verified Java 25 native-image build. Container bases are multi-architecture and run natively as linux/arm64 on the M4. Pin approved image digests for a deployed release.
+Quarkus **3.39.4** is the latest stable release checked on **2026-09-17**; see the [official release history](https://quarkus.io/releases/). PostgreSQL is pinned to the current 17.x patch, **17.11**. Extension versions are pinned: Quarkus LangChain4j **1.13.1**, MCP Server **2.0.1**. This project deliberately targets JVM Java 25; it does not claim a verified Java 25 native-image build. Container bases are multi-architecture and run natively as linux/arm64 on the M4. Pin approved image digests for a deployed release.
 
 - [Quarkus releases](https://quarkus.io/releases/)
 - [Quarkus LangChain4j MCP integration](https://docs.quarkiverse.io/quarkus-langchain4j/dev/mcp.html)

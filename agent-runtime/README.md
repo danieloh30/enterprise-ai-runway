@@ -32,6 +32,6 @@ runtime/
 - [security](src/main/java/com/danieloh/demo/runtime/security): presenter/OIDC authorization and local browser sessions.
 - [gateway](src/main/java/com/danieloh/demo/runtime/gateway): the client for gateway-protected MCP calls and policy probes.
 
-Tests under `src/test/java/com/danieloh/demo/runtime/` follow the same packages. Shared test fixtures live in `support/`. Runtime configuration stays in `src/main/resources/application.properties`, and the SPA stays in `src/main/resources/META-INF/resources/`.
+Tests under `src/test/java/com/danieloh/demo/runtime/` follow the same packages. Shared test fixtures live in `support/`. Service-specific configuration stays in `src/main/resources/application.properties`; shared database/HTTP defaults live in [shared configuration](../shared/src/main/resources/META-INF/microprofile-config.properties). The SPA stays in `src/main/resources/META-INF/resources/`.
 
 See the root README for configuration, API endpoints, the 15-minute script and verification commands. The shared root `Containerfile` builds the tested Java 25 JVM image for this module.

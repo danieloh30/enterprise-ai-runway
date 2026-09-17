@@ -43,7 +43,7 @@ public class DemoResource {
             modelReady=response.statusCode()==200 && response.body().contains("\""+model+"\"");
         } } catch(Exception e) {if(e instanceof InterruptedException)Thread.currentThread().interrupt();}
         recover();
-        return Map.of("quarkus","3.39.3","java",Runtime.version().feature(),"model",model,"modelReady",modelReady,
+        return Map.of("quarkus","3.39.4","java",Runtime.version().feature(),"model",model,"modelReady",modelReady,
             "gateway",gatewayKind,"database",!db.query("SELECT to_json(1)").isEmpty(),"data","Seeded enterprise incidents");
     }
     @GET @Path("/incidents") public List<JsonNode> incidents() {

@@ -43,3 +43,14 @@ Verified on 2026-09-17 on the same Apple Silicon Mac after changing `./demo.sh u
 - Five Python lifecycle tests passed, covering forked child cleanup, unrelated process preservation, startup failure logs, stop requests, and refusing to stop an unowned container. Bash/Python syntax checks and the 19 dependency-merge safeguard tests also passed.
 
 Smoke checks remain optional HTTP checks of the running flow. Dev Mode does not run them automatically. The demo was stopped after verification; its history remains in the database volume.
+
+
+## Quarkus 3.39.4 and shared configuration
+
+On 2026-09-17, upgraded the platform from 3.39.3 to the latest stable 3.39.4 and consolidated common datasource/HTTP settings into `shared/src/main/resources/META-INF/microprofile-config.properties`.
+
+- `./mvnw -B clean verify`: 26 Java tests passed with zero failures, errors, or skips; all modules packaged with the existing LangChain4j and MCP extension versions.
+- All three applications started in Quarkus 3.39.4 Dev Mode with the existing persistent PostgreSQL database.
+- Readiness and shared `X-Content-Type-Options`, `Referrer-Policy`, `Cache-Control`, and `X-Frame-Options` headers were verified on all three HTTP services.
+- `./demo.sh smoke` passed the actual gateway, MCP, database, approval/retry, rejection, and audit flow after the configuration change. The generated agent workflow tests used a mocked model; live model execution was not repeated for this patch upgrade.
+- Only `runway-db` was running in Podman; removing the redundant datasource flags did not start additional database containers. Explicit JDBC URLs select the launcher-managed database and isolated test configuration.
