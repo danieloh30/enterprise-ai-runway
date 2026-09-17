@@ -1,4 +1,8 @@
-package com.danieloh.demo.runtime;
+package com.danieloh.demo.runtime.workflow;
+
+import com.danieloh.demo.runtime.agents.InvestigatorAgent;
+import com.danieloh.demo.runtime.agents.ReviewerAgent;
+import com.danieloh.demo.runtime.support.AgentMcpTestResource;
 
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.agentic.agent.ChatMessagesAccess;
@@ -39,7 +43,7 @@ class InvestigationWorkflowTest {
     @InjectMock RunService runs;
 
     @BeforeEach
-    void setup() {reset(model,runs);AgentMcpTestResource.calls.clear();}
+    void setup() {reset(model,runs);AgentMcpTestResource.resetCalls();}
 
     @Test
     void sequenceCallsMcpThenReviewsIndependentEvidenceWithoutTools() {
@@ -52,7 +56,7 @@ class InvestigationWorkflowTest {
         UUID id=UUID.randomUUID();
         assertEquals("Reviewed report",workflow.investigate(id,"Investigate INC-2042","Independent observation: p95 850ms"));
         assertNoRetainedMemory(memoryId.get());
-        assertEquals(List.of("get_incident"),AgentMcpTestResource.calls);
+        assertEquals(List.of("get_incident"),AgentMcpTestResource.calls());
         var requests=ArgumentCaptor.forClass(ChatRequest.class);
         verify(model,times(3)).chat(requests.capture());
         assertFalse(requests.getAllValues().getFirst().parameters().toolSpecifications().isEmpty());
@@ -72,7 +76,7 @@ class InvestigationWorkflowTest {
     void rejectsTheFourthToolCallInOneResponse() {
         when(model.chat(any(ChatRequest.class))).thenReturn(toolResponse(4));
         assertThrows(RuntimeException.class,() -> workflow.investigate(UUID.randomUUID(),"Investigate INC-2042","Evidence"));
-        assertEquals(3,AgentMcpTestResource.calls.size());
+        assertEquals(3,AgentMcpTestResource.calls().size());
         verify(model,times(1)).chat(any(ChatRequest.class));
         verify(runs,never()).event(any(),eq("reviewer"),anyString(),anyString());
     }
@@ -81,7 +85,7 @@ class InvestigationWorkflowTest {
     void repeatedToolRequestsStopAtFourRounds() {
         when(model.chat(any(ChatRequest.class))).thenReturn(toolResponse(1));
         assertThrows(RuntimeException.class,() -> workflow.investigate(UUID.randomUUID(),"Investigate INC-2042","Evidence"));
-        assertEquals(4,AgentMcpTestResource.calls.size());
+        assertEquals(4,AgentMcpTestResource.calls().size());
         verify(runs,never()).event(any(),eq("reviewer"),anyString(),anyString());
     }
 

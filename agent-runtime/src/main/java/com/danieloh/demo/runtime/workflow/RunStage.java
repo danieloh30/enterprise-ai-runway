@@ -1,4 +1,4 @@
-package com.danieloh.demo.runtime;
+package com.danieloh.demo.runtime.workflow;
 
 import jakarta.interceptor.InterceptorBinding;
 import java.lang.annotation.Retention;

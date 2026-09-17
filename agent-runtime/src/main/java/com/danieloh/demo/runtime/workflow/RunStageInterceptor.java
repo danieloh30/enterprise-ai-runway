@@ -1,4 +1,4 @@
-package com.danieloh.demo.runtime;
+package com.danieloh.demo.runtime.workflow;
 
 import dev.langchain4j.agentic.agent.ChatMessagesAccess;
 import dev.langchain4j.service.memory.ChatMemoryAccess;

@@ -10,7 +10,7 @@ Configure `OPENAI_API_KEY` and run `./demo.sh up` before the session. Leave that
 
 Build the default blueprint. Inspect the MCP configuration and agent interface. The app identifies this as a template operation. Copy the prompt into the real IBM Bob IDE session. Use [the prepared prompt](ibm-bob-prompt.md) to add one tested, small enhancement; inspect the diff before accepting. Keep a prepared branch if venue connectivity is uncertain. Do not claim the UI is invoking Bob.
 
-If live coding takes more than two minutes, show `InvestigatorAgent.java` and the blueprint and move on. The runnable system already contains the complete implementation.
+If live coding takes more than two minutes, show [`agents/InvestigatorAgent.java`](../agent-runtime/src/main/java/com/danieloh/demo/runtime/agents/InvestigatorAgent.java) and the blueprint and move on. The runnable system already contains the complete implementation.
 
 ## Secure — 3 minutes
 

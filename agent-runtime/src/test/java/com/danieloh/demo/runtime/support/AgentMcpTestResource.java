@@ -1,4 +1,4 @@
-package com.danieloh.demo.runtime;
+package com.danieloh.demo.runtime.support;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpServer;
@@ -9,8 +9,11 @@ import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 public class AgentMcpTestResource implements QuarkusTestResourceLifecycleManager {
-    static final List<String> calls=new CopyOnWriteArrayList<>();
+    private static final List<String> calls=new CopyOnWriteArrayList<>();
     private HttpServer server;
+
+    public static List<String> calls() {return List.copyOf(calls);}
+    public static void resetCalls() {calls.clear();}
 
     @Override
     public Map<String,String> start() {

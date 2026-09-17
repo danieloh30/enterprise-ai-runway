@@ -1,4 +1,7 @@
-package com.danieloh.demo.runtime;
+package com.danieloh.demo.runtime.security;
+
+import com.danieloh.demo.runtime.gateway.GatewayClient;
+import com.danieloh.demo.runtime.workflow.RunService;
 
 import com.danieloh.demo.shared.Database;
 import io.quarkus.test.InjectMock;

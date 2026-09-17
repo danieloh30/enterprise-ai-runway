@@ -1,4 +1,6 @@
-package com.danieloh.demo.runtime;
+package com.danieloh.demo.runtime.workflow;
+
+import com.danieloh.demo.runtime.gateway.GatewayClient;
 
 import com.danieloh.demo.shared.Database;
 import com.fasterxml.jackson.databind.JsonNode;

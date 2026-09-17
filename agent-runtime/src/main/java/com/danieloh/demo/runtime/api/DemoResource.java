@@ -1,4 +1,7 @@
-package com.danieloh.demo.runtime;
+package com.danieloh.demo.runtime.api;
+
+import com.danieloh.demo.runtime.gateway.GatewayClient;
+import com.danieloh.demo.runtime.workflow.RunService;
 
 import com.danieloh.demo.shared.Database;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -49,6 +52,17 @@ public class DemoResource {
     @POST @Path("/blueprint") public Map<String,Object> blueprint(@Valid @NotNull BlueprintRequest request) {
         String config="quarkus.langchain4j.ai-service.max-tool-calling-round-trips=4\nquarkus.langchain4j.ai-service.max-tool-executions=${quarkus.langchain4j.ai-service.max-tool-calling-round-trips}\nquarkus.langchain4j.ai-service.max-tool-calls-per-response=3\nquarkus.langchain4j.mcp.enterprise.transport-type=streamable-http\nquarkus.langchain4j.mcp.enterprise.url=${MCP_GATEWAY_URL}/mcp\nquarkus.langchain4j.mcp.enterprise.header.Authorization=Bearer ${GATEWAY_READ_KEY}\n";
         String java="""
+            package com.danieloh.demo.runtime.agents;
+
+            import com.danieloh.demo.runtime.workflow.RunStage;
+            import dev.langchain4j.agentic.Agent;
+            import dev.langchain4j.agentic.declarative.ChatMemoryProviderSupplier;
+            import dev.langchain4j.memory.ChatMemory;
+            import dev.langchain4j.memory.chat.MessageWindowChatMemory;
+            import dev.langchain4j.service.*;
+            import io.quarkiverse.langchain4j.mcp.runtime.McpToolBox;
+            import java.util.UUID;
+
             public interface InvestigatorAgent {
                 @SystemMessage("Investigate using verified evidence. Human approval is required for actions.")
                 @McpToolBox("enterprise")
@@ -63,7 +77,7 @@ public class DemoResource {
             }
             """;
         String bob="Inspect this Quarkus Maven reactor and its existing tests. Use the Java release and Quarkus platform version configured in the root pom.xml, and resolve extension versions from the project's POMs and imported BOMs. Work with those pinned versions and use ./mvnw for build and verification commands. "+request.prompt()
-            +" Use the existing @Agent methods and @SequenceAgent workflow. Keep all agent tool calls behind the MCP gateway. Expose only parameterized, bounded read tools to the investigator. Preserve separate human approval and idempotency for writes. Add meaningful tests, update README, and explain the changes before applying them. Do not use real credentials or bypass gateway policy.";
+            +" Follow the runtime packages: agents for agent interfaces, workflow for orchestration, api for REST endpoints, security for access control, and gateway for the MCP client. Use the existing @Agent methods and @SequenceAgent workflow. Keep all agent tool calls behind the MCP gateway. Expose only parameterized, bounded read tools to the investigator. Preserve separate human approval and idempotency for writes. Add meaningful tests, update README, and explain the changes before applying them. Do not use real credentials or bypass gateway policy.";
         return Map.of("generator","Deterministic project templates — use the included prompt in IBM Bob for AI code generation",
             "prompt",request.prompt(),"bobPrompt",bob,"files",Map.of("application.properties",config,"InvestigatorAgent.java",java),
             "topology",Map.of("nodes",List.of("IBM Bob","Quarkus agents","Policy gateway","MCP tools","PostgreSQL"),

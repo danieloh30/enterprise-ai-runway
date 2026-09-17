@@ -1,4 +1,4 @@
-package com.danieloh.demo.runtime;
+package com.danieloh.demo.runtime.security;
 import io.quarkus.security.identity.SecurityIdentity;
 import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.core.*;

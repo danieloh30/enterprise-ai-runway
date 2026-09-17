@@ -1,4 +1,6 @@
-package com.danieloh.demo.runtime;
+package com.danieloh.demo.runtime.agents;
+
+import com.danieloh.demo.runtime.workflow.RunStage;
 
 import dev.langchain4j.agentic.Agent;
 import dev.langchain4j.agentic.declarative.ChatMemoryProviderSupplier;

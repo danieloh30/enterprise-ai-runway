@@ -1,4 +1,4 @@
-package com.danieloh.demo.runtime;
+package com.danieloh.demo.runtime.security;
 
 import com.danieloh.demo.shared.Secrets;
 import io.quarkus.security.identity.SecurityIdentity;

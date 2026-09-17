@@ -1,4 +1,4 @@
-package com.danieloh.demo.runtime;
+package com.danieloh.demo.runtime.api;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.*;
 import java.util.Map;

@@ -1,4 +1,4 @@
-package com.danieloh.demo.runtime;
+package com.danieloh.demo.runtime.gateway;
 
 import com.fasterxml.jackson.databind.*;
 import jakarta.enterprise.context.ApplicationScoped;

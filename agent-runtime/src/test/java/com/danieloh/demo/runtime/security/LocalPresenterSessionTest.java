@@ -1,4 +1,4 @@
-package com.danieloh.demo.runtime;
+package com.danieloh.demo.runtime.security;
 
 import jakarta.ws.rs.core.UriInfo;
 import org.junit.jupiter.api.Test;

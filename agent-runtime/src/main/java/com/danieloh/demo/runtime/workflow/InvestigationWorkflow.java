@@ -1,4 +1,7 @@
-package com.danieloh.demo.runtime;
+package com.danieloh.demo.runtime.workflow;
+
+import com.danieloh.demo.runtime.agents.InvestigatorAgent;
+import com.danieloh.demo.runtime.agents.ReviewerAgent;
 
 import dev.langchain4j.agentic.declarative.SequenceAgent;
 import dev.langchain4j.service.V;
