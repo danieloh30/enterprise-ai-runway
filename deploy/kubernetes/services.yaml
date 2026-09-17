@@ -1,0 +1,239 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: enterprise-ai-runway
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: runway-agent
+  namespace: enterprise-ai-runway
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: runway-agent}
+  template:
+    metadata:
+      labels: {app: runway-agent}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 0
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: agent
+          image: ghcr.io/danieloh30/runway-agent-runtime:1.0.0
+          imagePullPolicy: Always
+          ports:
+            - {name: http, containerPort: 8090}
+          envFrom:
+            - secretRef: {name: runway-runtime}
+          env:
+            - {name: QUARKUS_FLYWAY_MIGRATE_AT_START, value: "false"}
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {cpu: "2", memory: 768Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+          startupProbe:
+            httpGet: {path: /q/health/started, port: http}
+            periodSeconds: 3
+            failureThreshold: 40
+          readinessProbe:
+            httpGet: {path: /q/health/ready, port: http}
+            periodSeconds: 5
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet: {path: /q/health/live, port: http}
+            periodSeconds: 10
+            timeoutSeconds: 3
+      volumes:
+        - name: tmp
+          emptyDir: {sizeLimit: 64Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: runway-agent
+  namespace: enterprise-ai-runway
+spec:
+  selector: {app: runway-agent}
+  ports:
+    - {name: http, port: 8090, targetPort: http}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: runway-gateway
+  namespace: enterprise-ai-runway
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: runway-gateway}
+  template:
+    metadata:
+      labels: {app: runway-gateway}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 0
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: gateway
+          image: ghcr.io/danieloh30/runway-policy-gateway:1.0.0
+          imagePullPolicy: Always
+          ports:
+            - {name: http, containerPort: 8091}
+          envFrom:
+            - secretRef: {name: runway-gateway}
+          env:
+            - {name: QUARKUS_FLYWAY_MIGRATE_AT_START, value: "false"}
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {cpu: "2", memory: 768Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+          startupProbe:
+            httpGet: {path: /q/health/started, port: http}
+            periodSeconds: 3
+            failureThreshold: 40
+          readinessProbe:
+            httpGet: {path: /q/health/ready, port: http}
+            periodSeconds: 5
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet: {path: /q/health/live, port: http}
+            periodSeconds: 10
+            timeoutSeconds: 3
+      volumes:
+        - name: tmp
+          emptyDir: {sizeLimit: 64Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: runway-gateway
+  namespace: enterprise-ai-runway
+spec:
+  selector: {app: runway-gateway}
+  ports:
+    - {name: http, port: 8091, targetPort: http}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: runway-tools
+  namespace: enterprise-ai-runway
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: runway-tools}
+  template:
+    metadata:
+      labels: {app: runway-tools}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 0
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: tools
+          image: ghcr.io/danieloh30/runway-mcp-tools:1.0.0
+          imagePullPolicy: Always
+          ports:
+            - {name: http, containerPort: 8092}
+          envFrom:
+            - secretRef: {name: runway-tools}
+          env:
+            - {name: QUARKUS_FLYWAY_MIGRATE_AT_START, value: "false"}
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {cpu: "2", memory: 768Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+          startupProbe:
+            httpGet: {path: /q/health/started, port: http}
+            periodSeconds: 3
+            failureThreshold: 40
+          readinessProbe:
+            httpGet: {path: /q/health/ready, port: http}
+            periodSeconds: 5
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet: {path: /q/health/live, port: http}
+            periodSeconds: 10
+            timeoutSeconds: 3
+      volumes:
+        - name: tmp
+          emptyDir: {sizeLimit: 64Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: runway-tools
+  namespace: enterprise-ai-runway
+spec:
+  selector: {app: runway-tools}
+  ports:
+    - {name: http, port: 8092, targetPort: http}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: enterprise-ai-runway
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: agent-to-gateway
+  namespace: enterprise-ai-runway
+spec:
+  podSelector:
+    matchLabels: {app: runway-gateway}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: {app: runway-agent}
+      ports:
+        - {protocol: TCP, port: 8091}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: gateway-to-tools
+  namespace: enterprise-ai-runway
+spec:
+  podSelector:
+    matchLabels: {app: runway-tools}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: {app: runway-gateway}
+      ports:
+        - {protocol: TCP, port: 8092}

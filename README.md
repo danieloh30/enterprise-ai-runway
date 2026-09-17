@@ -1,0 +1,169 @@
+# Enterprise AI Runway
+
+**From prompt to governed agent execution in 15 minutes.** A complete Java 25 / Quarkus 3.39.3 Maven demo for IBM TechXchange 2026, built for Apple Silicon and local Podman.
+
+The SPA walks through the slide's three ideas: design with IBM Bob, secure MCP traffic at a gateway, and run Quarkus / LangChain4j agents against enterprise tools. An incident investigator reads PostgreSQL evidence; an independent reviewer checks its conclusions; a human decides whether to create a follow-up task.
+
+## Start on an M4 Mac
+
+Install a **JDK 25**, **Podman**, and **Ollama**. Maven is supplied by the checked-in wrapper. Bash, OpenSSL and Python 3 are used by the launcher and smoke checks. Node.js is needed only for optional UI tests.
+
+```bash
+# If Podman has not been initialized:
+podman machine init --cpus 4 --memory 6144
+podman machine start
+
+# Run Ollama natively on macOS for Metal acceleration.
+ollama serve                    # separate terminal; skip if Ollama is already running
+ollama pull llama3.2:latest
+
+# In this project:
+./demo.sh up
+```
+
+Open **http://localhost:8090**, then paste the presenter key printed by the launcher. Retrieve it again with `./demo.sh credentials`. The key is retained only in the browser tab's memory.
+
+The launcher detects an SDKMAN current JDK when `JAVA_HOME` is unset. For a standard macOS JDK installation use `export JAVA_HOME=$(/usr/libexec/java_home -v 25)`. If Java 25 is installed elsewhere, set `JAVA_HOME` to that JDK. `./mvnw -version` must report Java 25.
+
+The first build downloads dependencies and ARM64 container images. Allow 5–10 minutes **before** the presentation. The timed demo starts after the stack is ready. Reserve about 6 GB for the Podman VM, plus memory for macOS and the native model; an M4 Mac with 16 GB or more is a useful baseline. Actual inference speed depends on model size and memory pressure.
+
+Only the SPA/API port is published, bound to `127.0.0.1`. PostgreSQL, the gateway and MCP tools are private to `runway-net`. Application containers run as UID 1001, with read-only root filesystems, dropped capabilities, resource limits and no privilege escalation. Ollama runs on the Mac, accessed through `host.containers.internal`.
+
+## What is real in this demo?
+
+| Component | Behavior |
+|---|---|
+| Quarkus agents | Real LangChain4j AI services. The investigator uses an MCP tool provider; the reviewer has no tools. |
+| Enterprise data | Real PostgreSQL reads/writes with explicitly **seeded** incidents and telemetry. No connection to production systems. |
+| Local gateway | A **Quarkus policy simulator**, not IBM DataPower. It enforces authentication, role-specific allowlists, argument validation, rate limits and persisted decision audit. |
+| IBM Bob stage | The SPA assembles deterministic blueprint templates and a handoff prompt. Run that prompt in your actual IBM Bob IDE session for AI-generated code changes. The SPA does not claim to invoke Bob. |
+| Live AI mode | Calls the configured model; there is no silent fallback to canned responses. Failures appear as failed runs. |
+| Rehearsal mode | No model calls. Executes the real gateway, MCP tools, PostgreSQL and approval path, with an explicitly labeled deterministic report. |
+| Kubernetes / DataPower | Deployment references and integration instructions are included. No cluster or IBM appliance is provisioned by the local launcher. |
+
+This is a hardened, runnable reference application. An actual production deployment still requires your identity provider, TLS, secret management, least-privilege database accounts, shared rate limiting, backup/retention policies, model evaluation and the relevant IBM entitlement. See [production deployment](docs/production.md). It is not a claim of IBM certification or production accreditation.
+
+## The 15-minute story
+
+| Time | Action | Point to land |
+|---|---|---|
+| 0:00–1:00 | Open Runway, start the presenter timer, explain the topology. | There is one governed runtime path to tools. |
+| 1:00–4:00 | Build a blueprint. Copy the prompt into IBM Bob; inspect one small code change and its test. | AI-assisted development begins with explicit architecture and constraints. |
+| 4:00–7:00 | Open **Secure the path**. Run the 401, 403 and 400 probes and inspect the actual decision log. | Authentication, authorization and validation are independently enforced. |
+| 7:00–11:00 | Select `INC-2042`, choose **Live AI**, start the investigation. Follow the trace and report. | Agents reason over real tool responses through MCP. |
+| 11:00–13:00 | Approve the follow-up. Reopen the run from history. | Human authority and idempotent execution live outside the model. |
+| 13:00–15:00 | Show the two Java agent interfaces and the MCP tool. Discuss the DataPower deployment path. | The same application boundary can sit behind enterprise controls. |
+
+Detailed narration and recovery cues: [presenter runbook](docs/demo-runbook.md). A practical live coding prompt: [IBM Bob prompt](docs/ibm-bob-prompt.md).
+
+## Architecture
+
+```mermaid
+flowchart LR
+    Bob[IBM Bob in IDE] -. generates/reviews code .-> Runtime
+    UI[Runway SPA] -->|Presenter key or OIDC token| Runtime[Quarkus runtime]
+    Runtime --> Investigator[Investigator AI service]
+    Investigator <-->|Tool calling| LLM[Native Ollama / compatible model API]
+    Investigator -->|Read-only MCP credential| Gateway[Policy gateway / DataPower boundary]
+    Runtime --> Reviewer[Reviewer AI service: no tools]
+    Reviewer <-->|Risk review| LLM
+    Runtime -->|Human-approved write credential| Gateway
+    Gateway -->|Private backend credential| Tools[Quarkus MCP tools]
+    Tools -->|Parameterized SQL| DB[(PostgreSQL)]
+    Runtime -->|Run state and approval records| DB
+    Gateway -->|Decision audit| DB
+```
+
+The runtime gathers three baseline evidence records before invoking the investigator, so the reviewer also receives independently collected observations. These baseline calls are distinguished from the agent's own dynamic calls in the execution trace. The gateway decision log contains both. Tool results and model output are treated as untrusted content and rendered as text in the SPA.
+
+| Module | Responsibility | Internal port |
+|---|---|---|
+| `agent-runtime` | SPA, API, two AI services, execution deadline, persisted history, human decisions | 8090 |
+| `policy-gateway` | MCP request policy, credential separation, rate limiter, tool discovery filtering, audit | 8091 |
+| `mcp-tools` | MCP tools, Flyway schema migrations, database-backed operations | 8092 |
+| `shared` | Small JDBC and constant-time credential utilities | — |
+
+MCP is **Streamable HTTP**, request/response subset; GET subsidiary streams and legacy SSE transport are not proxied. The server enables per-request auto-initialization for explicit orchestration/probe calls. The LangChain4j client also performs normal initialization. Both JSON and SSE-framed POST responses are handled. `tools/list` hides write tools from the investigator; the gateway still denies direct attempts to call them.
+
+## Models and configuration
+
+`./demo.sh init` generates independent random credentials into `.env` with mode 0600. `.env` and build outputs are ignored by Git. Start from `.env.example` only when supplying your own configuration. Never commit real credentials.
+
+```properties
+# Default: native Ollama from the Podman VM
+LLM_BASE_URL=http://host.containers.internal:11434/v1
+LLM_MODEL=llama3.2:latest
+LLM_API_KEY=ollama
+```
+
+An OpenAI-compatible enterprise endpoint can be used by changing these three settings. The model must support tool calling. The `ollama` value is a local protocol placeholder, not a cloud credential. The model availability indicator checks `/models`; providers that do not expose that endpoint may still work. It does not guarantee adequate model quality or latency.
+
+The investigator is bounded to four tool-calling rounds and three calls per response. Each provider request has a 35-second timeout; the provider's minimum retry setting is 1. Runs have a 150-second overall deadline and two active execution slots per runtime instance. The reviewer has no tool provider or shared conversation memory. Expired/interrupted runs recover to failed status when read, and approvals recover against persisted follow-up records. There is no automatic retry of the whole agent workflow.
+
+For higher-quality local answers, pre-pull a larger tool-capable model and rehearse it on your actual Mac before changing `LLM_MODEL`. Rehearsal mode remains available without Ollama.
+
+## Commands and verification
+
+```bash
+./demo.sh up                  # Maven verify, build images, start services
+./demo.sh up --skip-build     # rebuild images using existing Maven packages
+./demo.sh status
+./demo.sh logs                # runtime logs; Ctrl-C stops log tail only
+./demo.sh logs runway-gateway
+./demo.sh smoke               # full stack, rehearsal, real DB writes
+SMOKE_MODE=live ./demo.sh smoke  # also verifies actual model execution
+./demo.sh down                # stop only this project's containers; preserve data
+
+./mvnw verify                # Java tests and all service packages
+npm ci                       # optional frontend test dependency
+npx playwright install chromium
+npm run test:ui              # requires running local stack and .env
+```
+
+Smoke/UI checks create seeded runs and follow-up tasks; they intentionally remain in history. Unit/API tests use mocks where appropriate; the smoke suite exercises the actual packaged services and PostgreSQL. Test cases include unauthorized API access, invalid input, tool escalation, JSON/SSE tool filtering, rate limiting, OIDC approval roles, concurrent approval, retries and rejection. Tests do not call a paid model by default.
+
+The immutable `run_id` is also the unique key for the follow-up. A write requires a persisted approval timestamp and an eligible run state inside the MCP tool's SQL statement. A timeout after commit is reconciled by checking the database before retrying. The only supported write is creating a follow-up; there is no arbitrary SQL, shell command, restart or production remediation tool.
+
+## API and observability
+
+All `/api/*` routes require `Authorization: Bearer <presenter key>` locally. With OIDC enabled, the token must have `groups: [presenter]`; approve/reject additionally require `approver`. This is a shared presenter workspace, not a multi-tenant application.
+
+| Method / path | Purpose |
+|---|---|
+| `GET /api/status` | Database/model readiness details and stale-run recovery |
+| `GET /api/incidents` | Seeded incident choices |
+| `POST /api/blueprint` | Generate template artifacts and IBM Bob handoff prompt |
+| `POST /api/runs` | Start a live/rehearsal investigation; returns 202 + run ID |
+| `GET /api/runs`, `GET /api/runs/{id}` | Persisted recent runs and execution details |
+| `POST /api/runs/{id}/approve` | Record a human decision and create one follow-up |
+| `POST /api/runs/{id}/reject` | Decline the recommendation |
+| `POST /api/probes/{kind}` | `unauthorized`, `forbidden-tool`, `invalid-arguments` |
+| `GET /api/audit`, `GET /api/followups` | Recent gateway decisions and tasks |
+| `GET /q/health/live`, `/q/health/ready` | Quarkus health endpoints |
+| `GET /q/metrics`, `/q/openapi` | Runtime Prometheus metrics / generated API schema |
+
+Gateway metric: `runway_gateway_requests_total`, tagged only by decision and principal. Runtime metric: `runway_runs_completed_total`, tagged by mode. Gateway request IDs are included in HTTP responses and stored with decisions. An `ALLOW` audit row means the policy admitted the request; it is not proof the backend operation succeeded. The run result/follow-up record provides that confirmation. Prompt and tool payloads are not written to the gateway audit table; run prompts and final reports are persisted in `runs`.
+
+## Troubleshooting
+
+- **Java cannot be found:** set `JAVA_HOME` to a JDK 25, not macOS's `/usr/bin/java` launcher.
+- **Podman cannot connect:** `podman machine start`; inspect `podman system connection list`. Existing unrelated containers are never stopped.
+- **Port 8090 is occupied:** stop the process using it or change the loopback mapping in `demo.sh`. Do not kill unrelated services.
+- **Model not found / failed live run:** confirm `ollama list`, the exact `LLM_MODEL` name and the container-visible base URL. Use rehearsal during the presentation if inference fails; it is labeled honestly.
+- **429 after many probes/runs:** the gateway allows 60 requests per minute per principal. Wait for the next minute before retrying.
+- **401 after restart:** re-copy `./demo.sh credentials`. The SPA deliberately does not persist its access key.
+- **Database login fails after editing `.env`:** the existing volume retains the original database password. Restore it or rotate the PostgreSQL role password explicitly; changing an environment variable does not rotate a database password.
+- **Data reset:** data is retained intentionally. To start a clean dataset, stop/remove only this project's containers and explicitly remove `runway-data`; that deletes all demo history. `down` does not delete data.
+- **Maven module-only dev launch cannot resolve `shared`:** first run `./mvnw install -DskipTests` from the root. For live coding, keep the packaged demo running and use a separate development port with explicit local dependencies/configuration.
+
+## Version and reference notes
+
+Quarkus **3.39.3** was the latest stable release verified on **2026-09-16**. PostgreSQL is pinned to the current 17.x patch, **17.11**. Extension versions are pinned: Quarkus LangChain4j **1.13.1**, MCP Server **2.0.1**. This project deliberately targets JVM Java 25; it does not claim a verified Java 25 native-image build. Container bases are multi-architecture and run natively as linux/arm64 on the M4. Pin approved image digests for a deployed release.
+
+- [Quarkus releases](https://quarkus.io/releases/)
+- [Quarkus LangChain4j MCP integration](https://docs.quarkiverse.io/quarkus-langchain4j/dev/mcp.html)
+- [Quarkus MCP HTTP transport](https://docs.quarkiverse.io/quarkus-mcp-server/dev/getting-started-http.html)
+- [Quarkus OIDC bearer authentication](https://quarkus.io/guides/security-oidc-bearer-token-authentication)
+- [IBM DataPower Gateway containers](https://www.ibm.com/docs/en/datapower-gateway/11.0.0?topic=virtual-datapower-gateway-docker)
+
+Author: **Daniel Oh** (`danieloh30`).

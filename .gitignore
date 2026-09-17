@@ -1,0 +1,11 @@
+**/target/
+**/.quarkus/
+.env
+.run/
+.DS_Store
+.idea/
+*.log
+node_modules/
+test-results/
+playwright-report/
+**/__pycache__/
