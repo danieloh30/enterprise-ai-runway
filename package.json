@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test:access": "playwright test --config=playwright.access.config.js",
     "test:ui": "playwright test"
   },
   "devDependencies": {

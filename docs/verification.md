@@ -21,3 +21,9 @@ The default provider was subsequently changed to OpenAI `gpt-4.1-mini`, with ser
 The actual inline Dependabot merge script passed 19 Node.js regression cases: the eligible PR path plus rejection of failed/superseded runs, untested heads, forks, incorrect authors/branches, non-POM changes and other ineligible cases. All workflow YAML files parsed, and frontend/launcher syntax checks passed. The workflow is configured to merge only after a successful Verify run for the current PR commit; a real Dependabot upgrade has not yet exercised the merge end to end.
 
 All running containers were stopped at the presenter's request. These follow-up checks did not start any containers.
+
+## Automatic local browser connection
+
+`./mvnw -B verify` passed with 19 Java tests after adding temporary local presenter sessions. HTTP-level tests cover session issuance, API authentication, disabled packaged defaults, and rejected cross-origin/simple requests. Unit tests cover OIDC disabling the feature, loopback hostname restrictions and invalidation after a runtime restart.
+
+`npm run test:access` passed four isolated Chromium tests covering automatic connection/reload, manual-mode fallback, visible backend failure and renewal after an expired session. These browser tests use mocked API responses and need neither containers nor an OpenAI key. The full PostgreSQL/model workflow was not rerun for this access change. The local launcher and Quarkus Dev Mode enable automatic connection; other packaged deployments require explicit opt-in.

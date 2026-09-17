@@ -17,6 +17,7 @@ public class ApiAuthentication implements ContainerRequestFilter {
     @ConfigProperty(name="runway.demo-key") String key;
     @ConfigProperty(name="quarkus.oidc.tenant-enabled") boolean oidc;
     @Inject SecurityIdentity identity;
+    @Inject LocalPresenterSession localSession;
     @Override public void filter(ContainerRequestContext request) {
         String path=request.getUriInfo().getPath().replaceFirst("^/+", "");
         if (!path.startsWith("api/")) return;
@@ -25,7 +26,8 @@ public class ApiAuthentication implements ContainerRequestFilter {
             if(identity.isAnonymous()) request.abortWith(Response.status(401).entity(Map.of("error","A valid OIDC access token is required")).build());
             else if(!identity.hasRole("presenter") || (decision && !identity.hasRole("approver")))
                 request.abortWith(Response.status(403).entity(Map.of("error","Required role is missing")).build());
-        } else if (!Secrets.matches(request.getHeaderString("Authorization"), "Bearer " + key))
+        } else if (!Secrets.matches(request.getHeaderString("Authorization"), "Bearer " + key)
+            && !localSession.authenticates(request.getUriInfo().getBaseUri(), request.getHeaderString("Authorization")))
             request.abortWith(Response.status(401).entity(Map.of("error","Enter the presenter access key from ./demo.sh credentials")).build());
     }
 }

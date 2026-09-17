@@ -41,3 +41,7 @@ See [deployment templates](../deploy/kubernetes/README.md). Supply built image r
 ## IBM DataPower
 
 See [DataPower integration](../deploy/datapower/README.md). The actual gateway requires an entitled, supported deployment and environment-specific policies. Do not substitute a simulator for the product in customer-facing claims.
+
+## Local presenter sessions
+
+The local launcher and Quarkus Dev Mode offer automatic browser connection through a temporary, in-memory bearer token. Set `LOCAL_AUTO_CONNECT=false` for deployed/shared environments and do not proxy the local-session endpoint to untrusted clients. Packaged applications default to disabled; enabling OIDC disables local sessions regardless of this flag. Server-side `.env` credentials are never returned by the session endpoint.

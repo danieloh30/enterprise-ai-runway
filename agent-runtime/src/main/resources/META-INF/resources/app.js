@@ -1,20 +1,25 @@
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
-const state = { key: '', view: 'build', mode: 'live', blueprint: null, run: null, incidents: [], poll: null, timerEnd: null, remaining: 900, modelReady: false };
+const state = { key: '', local: false, view: 'build', mode: 'live', blueprint: null, run: null, incidents: [], poll: null, timerEnd: null, remaining: 900, modelReady: false };
 const titles = { build: 'Build the blueprint', secure: 'Secure the path', execute: 'Let agents work', activity: 'Execution history' };
 const escape = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 const time = (value) => new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 let toastTimeout;
 function toast(message) { $('#toast').textContent = message; $('#toast').classList.remove('hidden'); clearTimeout(toastTimeout); toastTimeout = setTimeout(() => $('#toast').classList.add('hidden'), 6000); }
 function access() { if (!$('#access-dialog').open) $('#access-dialog').showModal(); }
-async function api(path, options = {}) {
+async function api(path, options = {}, retry = true) {
   if (!state.key) { access(); throw new Error('Connect with your presenter key first.'); }
   const response = await fetch(`/api${path}`, { ...options, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${state.key}` }, signal: AbortSignal.timeout(22000) });
   const text = await response.text();
   let data;
   try { data = text ? JSON.parse(text) : {}; } catch { data = { error: text.slice(0, 160) }; }
   if (!response.ok) {
-    if (response.status === 401) access();
+    if (response.status === 401) {
+      if (state.local && retry) {
+        try { if (await localSession()) return api(path, options, false); } catch { /* Fall back to manual access. */ }
+      }
+      state.key = ''; state.local = false; access();
+    }
     throw new Error(data.error || data.message || `Request failed (${response.status}). Check service logs.`);
   }
   return data;
@@ -33,11 +38,12 @@ function showView(view) {
 }
 $$('[data-view]').forEach((button) => button.addEventListener('click', () => showView(button.dataset.view)));
 $$('[data-next]').forEach((button) => button.addEventListener('click', () => showView(button.dataset.next)));
-$('#settings').addEventListener('click', access);
+$('#settings').addEventListener('click', () => state.local ? initializeAccess() : access());
 $('#close-access').addEventListener('click', () => $('#access-dialog').close());
 $('#access-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   state.key = $('#access-key').value.trim();
+  state.local = false;
   const button = event.submitter;
   button.disabled = true;
   $('#access-error').textContent = '';
@@ -61,6 +67,31 @@ async function connect() {
   $('#model-pill').classList.toggle('amber', !status.modelReady);
   incidentChanged();
   if (!status.modelReady) toast('Model availability could not be confirmed. Check the server API key and model settings, or use rehearsal mode.');
+}
+async function localSession() {
+  const response = await fetch('/local-session', {
+    method: 'POST', headers: { 'X-Runway-Local': '1' },
+    credentials: 'same-origin', cache: 'no-store', signal: AbortSignal.timeout(5000)
+  });
+  if (!response.ok) return false;
+  const session = await response.json();
+  if (typeof session.token !== 'string' || session.token.length < 24) return false;
+  state.key = session.token;
+  state.local = true;
+  return true;
+}
+async function initializeAccess() {
+  $('#connection').textContent = 'Connecting to your local demo…';
+  try {
+    if (await localSession()) {
+      await connect();
+      $('#access-dialog').close();
+      return;
+    }
+  } catch (error) { $('#access-error').textContent = `Connection unavailable: ${error.message}`; }
+  state.key = ''; state.local = false;
+  $('#connection').textContent = 'Connect with your presenter key to begin';
+  access();
 }
 function incidentChanged() {
   const incident = state.incidents.find((i) => i.id === $('#incident').value);
@@ -185,4 +216,4 @@ setInterval(() => {
 document.addEventListener('keydown', (event) => {
   if ((event.metaKey || event.ctrlKey) && event.key === 'Enter' && state.view === 'execute' && !$('#access-dialog').open) { event.preventDefault(); $('#run').click(); }
 });
-access();
+initializeAccess();

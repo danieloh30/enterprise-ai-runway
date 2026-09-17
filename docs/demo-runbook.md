@@ -1,6 +1,6 @@
 # Presenter runbook
 
-Do the first container build and configure `OPENAI_API_KEY` before the session. The default provider is OpenAI; a model download is needed only for optional Ollama. Run `./demo.sh smoke` and `SMOKE_MODE=live ./demo.sh smoke`, then open the SPA and reconnect with the presenter key. Leave the app running; the timer is presentation guidance, not a shutdown clock.
+Do the first container build and configure `OPENAI_API_KEY` before the session. The default provider is OpenAI; a model download is needed only for optional Ollama. Run `./demo.sh smoke` and `SMOKE_MODE=live ./demo.sh smoke`, then open the SPA; the local browser connects automatically. Leave the app running; the timer is presentation guidance, not a shutdown clock.
 
 ## Opening — 1 minute
 
@@ -38,7 +38,7 @@ Show the Java interfaces, `GatewayPolicy` and the `create_followup` SQL guard. E
 
 - Model unavailable: explicitly choose Rehearsal. “This mode exercises the same network and persistence path; it does not call an LLM.”
 - Live timeout: failed runs remain visible. Start a new rehearsal run; never silently substitute a canned AI answer.
-- Stale browser/key: retrieve `./demo.sh credentials`, click the gear, reconnect.
+- Stale browser/session: reload the page or click the gear to reconnect automatically. If manual mode is enabled, retrieve `./demo.sh credentials` and enter the key.
 - Too many requests: wait until the next minute. Do not raise limits during the security explanation.
 - Gateway unavailable: use `./demo.sh logs runway-gateway`; do not bypass it with direct tool calls.
 - Avoid a surprise reset: `./demo.sh down` keeps the database volume and all history.

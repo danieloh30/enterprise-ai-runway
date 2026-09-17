@@ -28,3 +28,7 @@ jobs:
           python3 -m py_compile scripts/smoke.py
       - name: Test dependency merge safeguards
         run: node --test tests/dependabot-automerge.test.cjs
+      - name: Verify local browser access
+        run: |
+          npx playwright install --with-deps chromium
+          npm run test:access

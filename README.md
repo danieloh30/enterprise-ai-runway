@@ -22,7 +22,9 @@ export OPENAI_API_KEY="your-api-key"
 ./demo.sh up
 ```
 
-Open **http://localhost:8090**, then paste the presenter key printed by the launcher. Retrieve it again with `./demo.sh credentials`. The key is retained only in the browser tab's memory.
+Open **http://localhost:8090**. The local launcher connects the SPA automatically—no presenter key to copy. Quarkus Dev Mode enables the same behavior by default. The browser receives a random runtime-session token; `.env` credentials, including `DEMO_API_KEY` and `OPENAI_API_KEY`, stay on the server. Reloading the page reconnects automatically.
+
+To require manual entry locally, set `LOCAL_AUTO_CONNECT=false` in `.env` and restart. Retrieve the presenter key with `./demo.sh credentials`; it also remains available for scripts/API clients. The key or temporary session token is held only in browser memory, never local storage.
 
 The launcher detects an SDKMAN current JDK when `JAVA_HOME` is unset. For a standard macOS JDK installation use `export JAVA_HOME=$(/usr/libexec/java_home -v 25)`. If Java 25 is installed elsewhere, set `JAVA_HOME` to that JDK. `./mvnw -version` must report Java 25.
 
@@ -98,7 +100,7 @@ flowchart TB
         Workflow -->|3 · Human decision| Approval
     end
 
-    UI -->|Key / OIDC| Workflow
+    UI -->|Local session / auth| Workflow
     Bob -.->|Development time| Workflow
     Investigator <-->|Tool calling| Model
     Reviewer <-->|Risk review| Model
@@ -186,6 +188,7 @@ SMOKE_MODE=live ./demo.sh smoke  # also verifies actual model execution
 ./mvnw verify                # Java tests and all service packages
 npm ci                       # optional frontend test dependency
 npx playwright install chromium
+npm run test:access          # isolated browser authentication checks; no services needed
 npm run test:ui              # requires running local stack and .env
 ```
 
@@ -195,10 +198,15 @@ The immutable `run_id` is also the unique key for the follow-up. A write require
 
 ## API and observability
 
-All `/api/*` routes require `Authorization: Bearer <presenter key>` locally. With OIDC enabled, the token must have `groups: [presenter]`; approve/reject additionally require `approver`. This is a shared presenter workspace, not a multi-tenant application.
+All `/api/*` routes require a bearer credential. For local browsing, the SPA automatically obtains a temporary session through `POST /local-session`; scripts can still use `Authorization: Bearer <DEMO_API_KEY>`. A session lasts for the runtime process and is renewed after restart. It never grants access when local auto-connect is disabled or OIDC is enabled.
+
+Automatic connection is enabled in Quarkus Dev Mode and explicitly enabled by `./demo.sh up`, which publishes only on `127.0.0.1`. Other packaged deployments default to disabled. The session endpoint requires a literal loopback hostname, a matching `Origin`, same-origin fetch metadata and the SPA's custom header; foreign origins are rejected. Keep this convenience limited to a trusted local machine, and never expose an enabled instance through a public proxy. Set `LOCAL_AUTO_CONNECT=false` for shared/deployed environments.
+
+With OIDC enabled, tokens must have `groups: [presenter]`; approve/reject additionally require `approver`. OIDC always disables local-session issuance, even if the local flag is true. This is a shared presenter workspace, not a multi-tenant application.
 
 | Method / path | Purpose |
 |---|---|
+| `POST /local-session` | Local-only, same-origin browser bootstrap; disabled for OIDC and normal packaged deployments |
 | `GET /api/status` | Database/model readiness details and stale-run recovery |
 | `GET /api/incidents` | Seeded incident choices |
 | `POST /api/blueprint` | Generate template artifacts and IBM Bob handoff prompt |
@@ -220,7 +228,7 @@ Gateway metric: `runway_gateway_requests_total`, tagged only by decision and pri
 - **Port 8090 is occupied:** stop the process using it or change the loopback mapping in `demo.sh`. Do not kill unrelated services.
 - **Model not found / failed live run:** confirm `OPENAI_API_KEY` is exported before startup, API access/billing, the exact `LLM_MODEL` and the base URL. After changing credentials, recreate the runtime with `./demo.sh up --skip-build`. For optional Ollama, check `ollama list`. Use rehearsal during the presentation if inference fails; it is labeled honestly.
 - **429 after many probes/runs:** the gateway allows 60 requests per minute per principal. Wait for the next minute before retrying.
-- **401 after restart:** re-copy `./demo.sh credentials`. The SPA deliberately does not persist its access key.
+- **401 after restart:** local browser sessions renew automatically. Reload the page if a request raced with startup. In manual mode, re-copy `./demo.sh credentials`. If automatic connection is unavailable, use `localhost` directly and check `LOCAL_AUTO_CONNECT`; OIDC deployments require their configured identity provider.
 - **Database login fails after editing `.env`:** the existing volume retains the original database password. Restore it or rotate the PostgreSQL role password explicitly; changing an environment variable does not rotate a database password.
 - **Data reset:** data is retained intentionally. To start a clean dataset, stop/remove only this project's containers and explicitly remove `runway-data`; that deletes all demo history. `down` does not delete data.
 - **Maven module-only dev launch cannot resolve `shared`:** first run `./mvnw install -DskipTests` from the root. For live coding, keep the packaged demo running and use a separate development port with explicit local dependencies/configuration.

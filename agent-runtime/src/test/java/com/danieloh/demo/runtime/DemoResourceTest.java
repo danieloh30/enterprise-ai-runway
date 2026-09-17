@@ -16,6 +16,10 @@ class DemoResourceTest {
   given().get("/api/incidents").then().statusCode(401);
   given().get("/").then().statusCode(200).body(containsString("Cleared for takeoff"));
  }
+ @Test void packagedDefaultsDoNotIssueLocalSessions(){
+  given().header("X-Runway-Local","1").header("Sec-Fetch-Site","same-origin")
+   .header("Origin","http://localhost:8081").post("/local-session").then().statusCode(404);
+ }
  @Test void rejectsBlankMissionAndInvalidModeBeforeStartingRun(){
   given().header("Authorization",AUTH).contentType("application/json").body("{\"incidentId\":\"INC-2042\",\"mode\":\"pretend\",\"prompt\":\"\"}")
    .post("/api/runs").then().statusCode(400);verifyNoInteractions(runs);

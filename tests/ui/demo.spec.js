@@ -3,8 +3,13 @@ import { readFileSync } from 'node:fs';
 const key = process.env.DEMO_API_KEY || readFileSync('.env', 'utf8').split('\n').find((line) => line.startsWith('DEMO_API_KEY=')).split('=')[1];
 async function connect(page) {
   await page.goto('/');
-  await page.getByLabel('PRESENTER ACCESS KEY', { exact: true }).fill(key);
-  await page.getByRole('button', { name: 'Connect →', exact: true }).click();
+  await expect.poll(async () =>
+    (await page.locator('#connection').innerText()).startsWith('Connected') ||
+    await page.locator('#access-dialog').isVisible()).toBe(true);
+  if (await page.locator('#access-dialog').isVisible()) {
+    await page.getByLabel('PRESENTER ACCESS KEY', { exact: true }).fill(key);
+    await page.getByRole('button', { name: 'Connect →', exact: true }).click();
+  }
   await expect(page.locator('#access-dialog')).not.toBeVisible();
 }
 test('blueprint, actual gateway probes, rehearsal approval and persisted history', async ({ page }) => {

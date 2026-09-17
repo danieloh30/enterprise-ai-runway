@@ -76,9 +76,10 @@ up() {
     --read-only --tmpfs /tmp:rw,size=64m --cap-drop=all --security-opt=no-new-privileges --memory=768m \
     -p 127.0.0.1:8090:8090 -e DB_URL -e DB_USER -e DB_PASSWORD -e DEMO_API_KEY -e GATEWAY_READ_KEY -e GATEWAY_WRITE_KEY \
     -e OPENAI_API_KEY -e LLM_BASE_URL -e LLM_MODEL -e LLM_API_KEY -e GATEWAY_KIND \
+    -e LOCAL_AUTO_CONNECT="${LOCAL_AUTO_CONNECT:-true}" \
     -e MCP_GATEWAY_URL="${MCP_GATEWAY_URL:-http://policy-gateway:8091}" localhost/runway-agent-runtime:local >/dev/null
   wait_http runway-agent 8090
-  printf '\nDemo ready: http://localhost:8090\nPresenter key: %s\n\n' "$DEMO_API_KEY"
+  printf '\nDemo ready: http://localhost:8090\nLocal browser connection: %s\nManual/API access key: ./demo.sh credentials\n\n' "${LOCAL_AUTO_CONNECT:-true}"
 }
 case "$command" in
   init) init ;;
