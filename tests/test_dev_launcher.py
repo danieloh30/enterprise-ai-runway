@@ -79,7 +79,7 @@ class LauncherTest(unittest.TestCase):
                 with (self.run / 'dev.lock').open('a') as lock:
                     self.assertFalse(dev.acquire(lock))
                     dev.down(lock)
-                self.assertEqual([*dev.LEGACY, 'runway-db'], [call.args[0] for call in stop.call_args_list])
+                self.assertEqual([*dev.LEGACY, 'runway-db', dev.DATAPOWER], [call.args[0] for call in stop.call_args_list])
             owner.wait(timeout=5)
             self.assertFalse((self.run / 'dev.stop').exists())
         finally:
