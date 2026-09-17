@@ -3,10 +3,9 @@ package com.danieloh.demo.runtime;
 import dev.langchain4j.agentic.Agent;
 import dev.langchain4j.service.*;
 import io.quarkiverse.langchain4j.RegisterAiService;
-import jakarta.enterprise.context.ApplicationScoped;
 import java.util.UUID;
 
-@ApplicationScoped
+// @Agent generates the application-scoped bean; explicitly disable tools and shared memory.
 @RegisterAiService(chatMemoryProviderSupplier=RegisterAiService.NoChatMemoryProviderSupplier.class,
     toolProviderSupplier=RegisterAiService.NoToolProviderSupplier.class)
 public interface ReviewerAgent {

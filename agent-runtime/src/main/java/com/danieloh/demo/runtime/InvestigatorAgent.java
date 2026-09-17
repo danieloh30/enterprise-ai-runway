@@ -4,11 +4,9 @@ import dev.langchain4j.agentic.Agent;
 import dev.langchain4j.service.*;
 import io.quarkiverse.langchain4j.RegisterAiService;
 import io.quarkiverse.langchain4j.mcp.runtime.McpToolBox;
-import jakarta.enterprise.context.ApplicationScoped;
 import java.util.UUID;
 
-@ApplicationScoped
-// Keep the AI Service configuration: @Agent adds orchestration, not tool/memory policy.
+// @Agent generates the application-scoped bean; these settings bound tools and isolate memory.
 @RegisterAiService(chatMemoryProviderSupplier=RegisterAiService.NoChatMemoryProviderSupplier.class,
     maxToolCallingRoundTrips=4, maxToolCallsPerResponse=3)
 public interface InvestigatorAgent {
