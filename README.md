@@ -30,9 +30,9 @@ To require manual entry locally, set `LOCAL_AUTO_CONNECT=false` in `.env` and re
 
 The launcher detects an SDKMAN current JDK when `JAVA_HOME` is unset. For a standard macOS JDK installation use `export JAVA_HOME=$(/usr/libexec/java_home -v 25)`. If Java 25 is installed elsewhere, set `JAVA_HOME` to that JDK. `./mvnw -version` must report Java 25.
 
-The first start downloads Maven dependencies and the PostgreSQL container image. Allow 5–10 minutes **before** the presentation. The timed demo starts after the stack is ready. The three Quarkus applications run on the host; only PostgreSQL needs the Podman VM. OpenAI runs inference remotely, so no local model download or GPU allocation is needed. Live AI requires internet connectivity and API access; rehearse once before presenting.
+The first start downloads Maven dependencies, the PostgreSQL image, and the IBM DataPower Gateway image (~1.5 GB; the amd64 image runs emulated on Apple Silicon and boots in 1–3 minutes). Allow 5–10 minutes **before** the presentation. The timed demo starts after the stack is ready. The three Quarkus applications run on the host; PostgreSQL and DataPower run in the Podman VM. OpenAI runs inference remotely, so no local model download or GPU allocation is needed. Live AI requires internet connectivity and API access; rehearse once before presenting. Set `GATEWAY_MODE=simulator` to skip the DataPower container and use the bundled Quarkus policy simulator instead.
 
-All three HTTP services and the database’s dynamically assigned host port bind to `127.0.0.1`. The services share PostgreSQL in `runway-db`, backed by the persistent `runway-data` volume. When upgrading from the container launcher, `up` stops the old application containers and recreates the database container with a loopback port, retaining that volume. Packaged deployment references remain under `deploy/`; local Dev Mode does not exercise their container restrictions. Only the agent runtime receives `OPENAI_API_KEY`; it calls OpenAI over HTTPS. The key is never sent to the SPA, gateway or MCP tools.
+The Quarkus HTTP services bind to `127.0.0.1`, except that `policy-gateway` binds all interfaces while DataPower is enabled so the container can reach it as `host.containers.internal:8091` (it still requires the bearer keys and denies browser-origin calls). The services share PostgreSQL in `runway-db`, backed by the persistent `runway-data` volume, and the runtime reaches the tools through DataPower (`runway-datapower`). When upgrading from the container launcher, `up` stops the old application containers and recreates the database container with a loopback port, retaining that volume. Packaged deployment references remain under `deploy/`; local Dev Mode does not exercise their container restrictions. Only the agent runtime receives `OPENAI_API_KEY`; it calls OpenAI over HTTPS. The key is never sent to the SPA, gateway or MCP tools.
 
 ## What is real in this demo?
 
@@ -40,11 +40,11 @@ All three HTTP services and the database’s dynamically assigned host port bind
 |---|---|
 | Agents | LangChain4j `@Agent` methods composed with `@SequenceAgent`. The investigator uses an MCP tool provider; the reviewer has no tools. |
 | Enterprise data | Real PostgreSQL reads/writes with explicitly **seeded** incidents and telemetry. No connection to production systems. |
-| Local gateway | A **Quarkus policy simulator**, not IBM DataPower. It enforces authentication, role-specific allowlists, argument validation, rate limits and persisted decision audit. |
+| Enterprise gateway | A real **IBM DataPower Gateway** container (`icr.io/cpopen/datapower/datapower-limited`) fronts the boundary; `./demo.sh up` starts it and the agents call it for real. It reverse-proxies MCP to a **Quarkus policy service** that enforces authentication, role-specific allowlists, argument validation, rate limits and persisted decision audit. `GATEWAY_MODE=simulator` runs the policy service alone without the container. |
 | IBM Bob stage | The SPA assembles deterministic blueprint templates and a handoff prompt. Run that prompt in your actual IBM Bob IDE session for AI-generated code changes. The SPA does not claim to invoke Bob. |
 | Live AI mode | Calls the configured model; there is no silent fallback to canned responses. Failures appear as failed runs. |
 | Rehearsal mode | No model calls. Executes the real gateway, MCP tools, PostgreSQL and approval path, with an explicitly labeled deterministic report. |
-| Kubernetes / DataPower | Deployment references and integration instructions are included. No cluster or IBM appliance is provisioned by the local launcher. |
+| Production topology | The local launcher runs DataPower as a container; it does **not** provision a Kubernetes cluster or an entitled DataPower appliance. `deploy/` holds the cluster manifests and the production DataPower / API Connect integration guide. |
 
 This is a hardened, runnable reference application. An actual production deployment still requires your identity provider, TLS, secret management, least-privilege database accounts, shared rate limiting, backup/retention policies, model evaluation and the relevant IBM entitlement. See [production deployment](docs/production.md). It is not a claim of IBM certification or production accreditation.
 
@@ -57,7 +57,7 @@ This is a hardened, runnable reference application. An actual production deploym
 | 4:00–7:00 | Open **Secure the path**. Run the 401, 403 and 400 probes and inspect the actual decision log. | Authentication, authorization and validation are independently enforced. |
 | 7:00–11:00 | Select `INC-2042`, choose **Live AI**, start the investigation. Follow the trace and report. | Agents reason over real tool responses through MCP. |
 | 11:00–13:00 | Approve the follow-up. Reopen the run from history. | Human authority and idempotent execution live outside the model. |
-| 13:00–15:00 | Show the two Java agent interfaces and the MCP tool. Discuss the DataPower deployment path. | The same application boundary can sit behind enterprise controls. |
+| 13:00–15:00 | Show the two Java agent interfaces and the MCP tool, and the `[datapower]` transactions in the launcher. Discuss scaling to an entitled DataPower / API Connect deployment. | The same application boundary already sits behind a real enterprise gateway. |
 
 Detailed narration and recovery cues: [presenter runbook](docs/demo-runbook.md). A practical live coding prompt: [IBM Bob prompt](docs/ibm-bob-prompt.md).
 
@@ -110,9 +110,11 @@ flowchart TB
 
     subgraph Governed["Governed MCP path"]
         direction LR
-        Gateway(["Policy gateway · :8091<br/>Enforce · protect · audit"])
+        DataPower(["IBM DataPower · :8788<br/>Enterprise gateway"])
+        Gateway(["Policy service · :8091<br/>Enforce · protect · audit"])
         Tools(["MCP tools · :8092<br/>Read evidence<br/>Create follow-up"])
         DB[("PostgreSQL<br/>Seeded enterprise data")]
+        DataPower -->|Reverse proxy /mcp| Gateway
         Gateway -->|Backend auth| Tools
         Tools -->|SQL| DB
     end
@@ -129,12 +131,12 @@ flowchart TB
     class UI,Bob entry;
     class Workflow,Investigator agent;
     class Reviewer,DB review;
-    class Approval,Gateway approval;
+    class Approval,Gateway,DataPower approval;
     class Tools tools;
     class Model external;
 ```
 
-The numbered branches show the workflow stages in order: investigation, independent review, then a human decision. The runtime also persists run state and approval records in PostgreSQL, and the gateway persists its decision audit there. The local policy gateway is a Quarkus simulator; IBM DataPower can replace that boundary using the [integration guide](deploy/datapower/README.md).
+The numbered branches show the workflow stages in order: investigation, independent review, then a human decision. The runtime also persists run state and approval records in PostgreSQL, and the policy service persists its decision audit there. `./demo.sh up` runs a real **IBM DataPower Gateway** container in front of the policy service; the agents call DataPower, which reverse-proxies MCP to the Quarkus policy service (see the [integration guide](deploy/datapower/README.md)). Set `GATEWAY_MODE=simulator` to run the policy service directly without the container.
 
 The runtime gathers three baseline evidence records before invoking the investigator, so the reviewer also receives independently collected observations. These baseline calls are distinguished from the agent's own dynamic calls in the execution trace. The gateway decision log contains both. Tool results and model output are treated as untrusted content and rendered as text in the SPA.
 

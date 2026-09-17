@@ -1,6 +1,6 @@
 # Presenter runbook
 
-Configure `OPENAI_API_KEY` and run `./demo.sh up` before the session. Leave that terminal open for Quarkus Dev Mode logs and live reload. The default provider is OpenAI; a model download is needed only for optional Ollama. Optionally run `./demo.sh smoke` and `SMOKE_MODE=live ./demo.sh smoke` in a second terminal to verify the complete flow, then open the SPA; the local browser connects automatically. Leave the app running; the timer is presentation guidance, not a shutdown clock.
+Configure `OPENAI_API_KEY` and run `./demo.sh up` before the session. **Run `up` once ahead of time**: it starts a real IBM DataPower Gateway container in front of the policy service, and on Apple Silicon that image is emulated — the first run pulls ~1.5 GB and boots in 1–3 minutes. Leave that terminal open for Quarkus Dev Mode logs and live reload. The default provider is OpenAI; a model download is needed only for optional Ollama. Optionally run `./demo.sh smoke` and `SMOKE_MODE=live ./demo.sh smoke` in a second terminal to verify the complete flow, then open the SPA; the local browser connects automatically. Leave the app running; the timer is presentation guidance, not a shutdown clock. If venue connectivity is uncertain, `GATEWAY_MODE=simulator ./demo.sh up` runs the same flow through the bundled Quarkus policy simulator with no container.
 
 ## Opening — 1 minute
 
@@ -18,7 +18,7 @@ If live coding takes more than two minutes, show [`agents/InvestigatorAgent.java
 2. Read-only agent asks for `create_followup` → HTTP 403.
 3. SQL-shaped incident ID → HTTP 400.
 
-Each button issues an actual request to the gateway. Show the persisted decision log and request ID. Explain that checking prompts alone is insufficient: capability boundaries must be enforced outside the model. The local component is a simulator; use the included DataPower integration path when an entitled endpoint is available.
+Each button issues an actual request that transits the IBM DataPower Gateway container and then the policy service. Show the persisted decision log and request ID, and point at the `[datapower]` transaction lines in the launcher. Explain that checking prompts alone is insufficient: capability boundaries must be enforced outside the model. This is the real product fronting the boundary; scale it to an entitled DataPower / API Connect deployment for production (see `deploy/datapower`).
 
 ## Execute — 4 minutes
 
@@ -40,5 +40,5 @@ Show the Java interfaces, `GatewayPolicy` and the `create_followup` SQL guard. E
 - Live timeout: failed runs remain visible. Start a new rehearsal run; never silently substitute a canned AI answer.
 - Stale browser/session: reload the page or click the gear to reconnect automatically. If manual mode is enabled, retrieve `./demo.sh credentials` and enter the key.
 - Too many requests: wait until the next minute. Do not raise limits during the security explanation.
-- Gateway unavailable: check the `[policy-gateway]` output in the `./demo.sh up` terminal; do not bypass it with direct tool calls.
+- Gateway unavailable: check the `[datapower]` and `[policy-gateway]` output in the `./demo.sh up` terminal; do not bypass them with direct tool calls. If DataPower is slow to boot or the venue is offline, stop and restart with `GATEWAY_MODE=simulator ./demo.sh up`.
 - Avoid a surprise reset: Ctrl+C in the launcher or `./demo.sh down` stops the demo and keeps the database volume and all history. Finish active investigations before triggering live reload.

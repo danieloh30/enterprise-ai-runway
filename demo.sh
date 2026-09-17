@@ -12,7 +12,14 @@ init() {
 # Export OPENAI_API_KEY before ./demo.sh up for live AI.
 LLM_BASE_URL=https://api.openai.com/v1
 LLM_MODEL=gpt-4.1-mini
-GATEWAY_KIND='Local policy simulator'
+# ./demo.sh up starts a real IBM DataPower Gateway container in front of the policy
+# service (running it accepts the IBM DataPower license). The image is amd64-only, so
+# it runs emulated on Apple Silicon: a ~1.5 GB one-time pull and a 1-3 minute boot.
+DATAPOWER_IMAGE=icr.io/cpopen/datapower/datapower-limited:10.6.0.0
+DATAPOWER_PORT=8788
+# Skip DataPower and use the bundled Quarkus policy simulator (offline/slow venues):
+#   GATEWAY_MODE=simulator ./demo.sh up
+# Leave GATEWAY_MODE and GATEWAY_KIND out of this file so that override still works.
 ENV
     printf 'Created .env with unique local credentials.\n'
   fi
@@ -33,6 +40,6 @@ case "$command" in
   credentials) load; printf 'Presenter key: %s\n' "$DEMO_API_KEY" ;;
   status|down) exec python3 scripts/dev.py "$command" ;;
   smoke) load; python3 scripts/smoke.py ;;
-  help|-h|--help) printf 'Usage: ./demo.sh {init|up|credentials|status|down|smoke}\nup streams Quarkus Dev Mode logs; Ctrl+C stops the demo and preserves history.\n' ;;
+  help|-h|--help) printf 'Usage: ./demo.sh {init|up|credentials|status|down|smoke}\nup streams Quarkus Dev Mode logs; Ctrl+C stops the demo and preserves history.\nup also starts a real IBM DataPower Gateway container (amd64, emulated on Apple\nSilicon: ~1.5 GB one-time pull, 1-3 min boot). GATEWAY_MODE=simulator skips it.\n' ;;
   *) echo "Unknown command: $command. Run ./demo.sh help." >&2; exit 2 ;;
 esac

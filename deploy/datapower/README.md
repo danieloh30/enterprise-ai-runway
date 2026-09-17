@@ -1,33 +1,85 @@
-# Connect an actual IBM DataPower Gateway
+# IBM DataPower Gateway (local container)
 
-The laptop includes a Quarkus policy simulator so it runs natively on Apple Silicon without requiring an IBM appliance or entitlement. It does **not** package or emulate IBM DataPower. Use an entitled DataPower / API Connect deployment for the real product segment of the talk.
+`./demo.sh up` starts a real **IBM DataPower Gateway** container with Podman and puts it
+in front of the Quarkus `policy-gateway`. The agents talk to DataPower for real; DataPower
+forwards each MCP call to the reference policy service, which keeps its tool-level checks.
 
-## A practical integration boundary
+```
+agent-runtime ─▶ http://127.0.0.1:8788/mcp   DataPower (container)
+DataPower     ─▶ http://host.containers.internal:8091/mcp   policy-gateway (laptop)
+policy-gateway─▶ http://127.0.0.1:8092/mcp   mcp-tools (laptop)
+```
 
-Expose an HTTPS `/mcp` endpoint in DataPower that authenticates the runtime service identity, applies your organization's rate and payload policies, and forwards to `policy-gateway:8091/mcp` in the deployed environment. Keeping the reference policy service behind DataPower preserves its tool-level checks while DataPower handles enterprise ingress controls. This is the quickest way to connect the runnable demo to the actual gateway without pretending an environment-independent appliance export exists.
+## What the launcher does
 
-Configure the runtime's `MCP_GATEWAY_URL` to the DataPower URL **without** the `/mcp` suffix and set `GATEWAY_KIND='IBM DataPower + tool policy service'`. Both the direct orchestration client and LangChain4j client use this base URL. Forward the Authorization header to the policy service unchanged or map validated read/approval identities onto the corresponding internal credentials using protected gateway configuration. Never expose these internal credentials to browser code.
+- Runs `icr.io/cpopen/datapower/datapower-limited` (the free, non-production developers
+  edition; no entitlement or registry login required) as container `runway-datapower`,
+  labeled `app=enterprise-ai-runway`, with `DATAPOWER_ACCEPT_LICENSE=true`.
+- Publishes the MCP ingress port `8788` on `127.0.0.1` only.
+- Mounts [`config/auto-startup.cfg`](config/auto-startup.cfg) read-only into the default
+  domain (`/opt/ibm/datapower/drouter/config`). DataPower auto-executes it at boot to
+  create a Multi-Protocol Gateway that reverse-proxies `/mcp` to the policy service.
+- Binds `policy-gateway` to all interfaces (instead of loopback) only while DataPower is
+  enabled, so the container can reach it at `host.containers.internal:8091`. The gateway
+  still requires the read/approval bearer keys and still denies any browser-origin call.
+- Waits until DataPower accepts traffic, then hands off to the demo. `./demo.sh down`
+  (or Ctrl+C) stops the container; the database volume and history are retained.
 
-The policy service must be reachable from the real gateway. Laptop-only Podman DNS names are not accessible to a remote appliance. Deploy the services together in a reachable private environment, or use an explicitly approved secure tunnel for the talk. The launcher never exposes the backend tools or database to the internet.
+## Apple Silicon note
 
-## Required gateway behavior
+The DataPower image is **amd64-only** — there is no native arm64 build. On Apple Silicon
+it runs emulated through the Podman machine (libkrun + Rosetta): expect a **~1.5 GB
+one-time pull** and a **1–3 minute boot** on each `up`. This is why the demo also ships a
+lightweight Quarkus policy simulator: set `GATEWAY_MODE=simulator` before `./demo.sh up`
+to skip the container entirely (offline or slow venues). The launcher never exposes the
+backend tools or database to the network.
 
-- Validate TLS and the caller identity; use separate read and approval identities.
-- Preserve JSON-RPC bodies, HTTP response codes, `Accept`, `Content-Type`, `Mcp-Session-Id`, and `Mcp-Protocol-Version`.
-- Allow the required JSON-RPC methods: `initialize`, `notifications/initialized`, `ping`, `tools/list`, `tools/call`.
-- Forward POST response content as JSON or SSE framing without rewriting tool results. Keep timeouts compatible with the runtime's 15-second tool-call deadline.
-- Apply a 32 KB request limit and the chosen shared rate policy. Reject JSON-RPC batches and unknown operations at the policy service.
-- Strip externally supplied internal backend credentials; only the tool policy service holds `BACKEND_KEY`.
-- Record request IDs and decisions in the enterprise audit system. Use the reference database audit for the demo's application policy decisions.
+## The gateway config
 
-If your deployment requires a client ID header, extend both `GatewayClient` and the named MCP client's static header configuration consistently. Do not modify only one of the two paths. If your gateway uses OAuth service tokens, integrate approved client-credentials acquisition and renewal; a fixed token in `.env` is not a production token-management strategy.
+[`config/auto-startup.cfg`](config/auto-startup.cfg) is intentionally a pass-through
+reverse proxy so the demo's security story stays in the policy service:
 
-## Verify the real product path
+- An HTTP front-side handler on `8788` and a Multi-Protocol Gateway with a static backend
+  of `http://host.containers.internal:8091` and `propagate-uri`, so `/mcp` is forwarded
+  verbatim.
+- `request-type`/`response-type` are `unprocessed` with an empty processing policy, so
+  JSON-RPC and SSE bodies pass through untouched and no `Origin` header is added — the
+  policy service's credential, rate and tool-list checks continue to apply.
+- Preserves `Authorization`, `Accept`, `Content-Type`, `Mcp-Session-Id` and
+  `Mcp-Protocol-Version`; timeouts (120 s) stay above the runtime's 15 s tool deadline.
 
-1. Check `/mcp` connectivity and normal initialization using the runtime.
-2. Confirm `tools/list` for the investigator returns only the three read tools.
-3. Run the SPA's invalid credential, write escalation and unsafe-argument probes through DataPower.
-4. Complete a live investigation and approval, then match request IDs across runtime, DataPower and policy audit.
-5. Repeat approval to verify there is still only one follow-up.
+To watch traffic during the talk, follow the `[datapower]` lines in the `./demo.sh up`
+terminal — each forwarded request is logged by the gateway.
 
-No appliance-specific configuration export is supplied: IBM product/version, certificates, identity policies and backend topology must match your actual environment. Start from the official [DataPower container documentation](https://www.ibm.com/docs/en/datapower-gateway/11.0.0?topic=virtual-datapower-gateway-docker) and your API Connect deployment's policy reference. The slide's gateway placement is an architectural concept; this repository uses the product name **IBM DataPower Gateway**.
+## Moving to a production DataPower
+
+The local container is a faithful but minimal stand-in. For a production segment, run an
+entitled DataPower / API Connect deployment and keep the same boundary: expose an **HTTPS**
+`/mcp` endpoint that authenticates the runtime's service identity, applies your rate and
+payload policies, and forwards to the policy service. Then point the runtime's
+`MCP_GATEWAY_URL` at that endpoint (base URL, without the `/mcp` suffix) and set
+`GATEWAY_KIND` accordingly.
+
+Harden beyond this demo config:
+
+- Terminate TLS and validate the caller identity; use separate read and approval
+  identities rather than forwarding a fixed bearer token.
+- Keep preserving JSON-RPC bodies, HTTP status codes and the `Accept`, `Content-Type`,
+  `Mcp-Session-Id` and `Mcp-Protocol-Version` headers; allow only `initialize`,
+  `notifications/initialized`, `ping`, `tools/list` and `tools/call`.
+- Enforce the 32 KB request limit and a shared rate policy; reject JSON-RPC batches and
+  unknown operations at the policy service.
+- Strip externally supplied internal backend credentials; only the policy service holds
+  `BACKEND_KEY`. Record request IDs and decisions in the enterprise audit system.
+- If your gateway needs a client-ID header, extend both `GatewayClient` and the named MCP
+  client's static header configuration together. For OAuth service tokens, integrate
+  approved client-credentials acquisition and renewal; a fixed token is not a production
+  token-management strategy.
+
+A remote appliance cannot resolve laptop-only Podman DNS names, so in a shared environment
+deploy the services together in a reachable private network (see `../kubernetes`) or use
+an explicitly approved secure tunnel. IBM product/version, certificates, identity policies
+and backend topology must match your actual environment. Start from the official
+[DataPower container documentation](https://www.ibm.com/docs/en/datapower-gateway/10.6.x?topic=virtual-datapower-gateway-docker)
+and your API Connect deployment's policy reference. The repository uses the product name
+**IBM DataPower Gateway**.
