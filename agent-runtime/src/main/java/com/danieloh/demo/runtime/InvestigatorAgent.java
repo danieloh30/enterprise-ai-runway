@@ -1,11 +1,14 @@
 package com.danieloh.demo.runtime;
 
+import dev.langchain4j.agentic.Agent;
 import dev.langchain4j.service.*;
 import io.quarkiverse.langchain4j.RegisterAiService;
 import io.quarkiverse.langchain4j.mcp.runtime.McpToolBox;
 import jakarta.enterprise.context.ApplicationScoped;
+import java.util.UUID;
 
 @ApplicationScoped
+// Keep the AI Service configuration: @Agent adds orchestration, not tool/memory policy.
 @RegisterAiService(chatMemoryProviderSupplier=RegisterAiService.NoChatMemoryProviderSupplier.class,
     maxToolCallingRoundTrips=4, maxToolCallsPerResponse=3)
 public interface InvestigatorAgent {
@@ -18,5 +21,7 @@ public interface InvestigatorAgent {
         Any action requires a human decision outside this conversation. Do not request write tools.
         """)
     @McpToolBox("enterprise")
-    String investigate(@UserMessage String message);
+    @Agent(name="investigator", description="Investigate an incident using read-only enterprise MCP tools", outputKey="finding")
+    @RunStage
+    String investigate(@V("runId") UUID runId, @V("message") @UserMessage String message);
 }

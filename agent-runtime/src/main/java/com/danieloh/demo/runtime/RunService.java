@@ -17,8 +17,7 @@ public class RunService {
     private static final Logger LOG=Logger.getLogger(RunService.class);
     @Inject Database db;
     @Inject GatewayClient gateway;
-    @Inject InvestigatorAgent investigator;
-    @Inject ReviewerAgent reviewer;
+    @Inject InvestigationWorkflow investigation;
     @Inject MeterRegistry metrics;
     private final Semaphore slots=new Semaphore(2);
     private final ExecutorService workers=Executors.newVirtualThreadPerTaskExecutor();
@@ -53,12 +52,8 @@ public class RunService {
         }
         String report;
         if(mode.equals("live")) {
-            event(id,"investigator","STARTED","Investigator is selecting read-only MCP tools");
-            String finding=investigator.investigate("Investigate incident "+incidentId+". Additional user context: "+prompt);
-            checkRunning(id);
-            event(id,"investigator","COMPLETED","Investigation complete; sending observations to independent reviewer");
-            report=reviewer.review("Verified database evidence: "+db.json(evidence)+"\nInvestigator assessment: "+finding);
-            event(id,"reviewer","COMPLETED","Risk review complete; awaiting a human decision");
+            report=investigation.investigate(id,
+                "Investigate incident "+incidentId+". Additional user context: "+prompt,db.json(evidence));
         } else {
             report="REHEARSAL — deterministic report, no AI generation.\n\nFinding\n"+evidence.get("get_incident").path("summary").asText()
                 +"\n\nEvidence\n"+db.json(evidence.get("get_service_metrics"))
@@ -99,8 +94,8 @@ public class RunService {
         if(db.update("UPDATE runs SET status='REJECTED',updated_at=now() WHERE id=? AND status='AWAITING_APPROVAL'",id)!=1)
             throw new WebApplicationException("Run is not awaiting approval",409);
     }
-    private void checkRunning(UUID id) {if(Thread.currentThread().isInterrupted() || !get(id).path("status").asText().equals("RUNNING")) throw new IllegalStateException("Run no longer active");}
-    private void event(UUID id,String actor,String kind,String detail) {
+    void checkRunning(UUID id) {if(Thread.currentThread().isInterrupted() || !get(id).path("status").asText().equals("RUNNING")) throw new IllegalStateException("Run no longer active");}
+    void event(UUID id,String actor,String kind,String detail) {
         db.update("UPDATE runs SET events=events || ?::jsonb,updated_at=now() WHERE id=? AND status='RUNNING'",
             db.json(List.of(Map.of("at",Instant.now().toString(),"actor",actor,"kind",kind,"detail",detail))),id);
     }

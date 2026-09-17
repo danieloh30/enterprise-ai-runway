@@ -49,16 +49,18 @@ public class DemoResource {
     @POST @Path("/blueprint") public Map<String,Object> blueprint(@Valid @NotNull BlueprintRequest request) {
         String config="quarkus.langchain4j.mcp.enterprise.transport-type=streamable-http\nquarkus.langchain4j.mcp.enterprise.url=${MCP_GATEWAY_URL}/mcp\nquarkus.langchain4j.mcp.enterprise.header.Authorization=Bearer ${GATEWAY_READ_KEY}\n";
         String java="""
-            @RegisterAiService(maxToolCallingRoundTrips = 4,
+            @RegisterAiService(maxToolCallingRoundTrips = 4, maxToolCallsPerResponse = 3,
                 chatMemoryProviderSupplier = RegisterAiService.NoChatMemoryProviderSupplier.class)
             public interface InvestigatorAgent {
                 @SystemMessage("Investigate using verified evidence. Human approval is required for actions.")
                 @McpToolBox("enterprise")
-                String investigate(@UserMessage String message);
+                @Agent(name = "investigator", description = "Investigate using read-only MCP tools", outputKey = "finding")
+                @RunStage
+                String investigate(@V("runId") UUID runId, @V("message") @UserMessage String message);
             }
             """;
         String bob="In this Java 25 / Quarkus 3.39.3 Maven project, inspect the three services and existing tests. "+request.prompt()
-            +" Keep all agent tool calls behind the MCP gateway. Expose only parameterized, bounded read tools to the investigator. Preserve separate human approval and idempotency for writes. Add meaningful tests, update README, and explain the changes before applying them. Do not use real credentials or bypass gateway policy.";
+            +" Use the existing @Agent methods and @SequenceAgent workflow. Keep all agent tool calls behind the MCP gateway. Expose only parameterized, bounded read tools to the investigator. Preserve separate human approval and idempotency for writes. Add meaningful tests, update README, and explain the changes before applying them. Do not use real credentials or bypass gateway policy.";
         return Map.of("generator","Deterministic project templates — use the included prompt in IBM Bob for AI code generation",
             "prompt",request.prompt(),"bobPrompt",bob,"files",Map.of("application.properties",config,"InvestigatorAgent.java",java),
             "topology",Map.of("nodes",List.of("IBM Bob","Quarkus agents","Policy gateway","MCP tools","PostgreSQL"),

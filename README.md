@@ -36,7 +36,7 @@ Only the SPA/API port is published, bound to `127.0.0.1`. PostgreSQL, the gatewa
 
 | Component | Behavior |
 |---|---|
-| Agents | Java agents using Quarkus LangChain4j. The investigator uses an MCP tool provider; the reviewer has no tools. |
+| Agents | LangChain4j `@Agent` methods composed with `@SequenceAgent`. The investigator uses an MCP tool provider; the reviewer has no tools. |
 | Enterprise data | Real PostgreSQL reads/writes with explicitly **seeded** incidents and telemetry. No connection to production systems. |
 | Local gateway | A **Quarkus policy simulator**, not IBM DataPower. It enforces authentication, role-specific allowlists, argument validation, rate limits and persisted decision audit. |
 | IBM Bob stage | The SPA assembles deterministic blueprint templates and a handoff prompt. Run that prompt in your actual IBM Bob IDE session for AI-generated code changes. The SPA does not claim to invoke Bob. |
@@ -90,9 +90,9 @@ flowchart TB
     Bob(["IBM Bob in the IDE<br/>Code generation"])
 
     subgraph Runtime["Quarkus runtime · :8090"]
-        Workflow(["RunService<br/>Investigation workflow"])
-        Investigator(["InvestigatorAgent<br/>@RegisterAiService<br/>@McpToolBox"])
-        Reviewer(["ReviewerAgent<br/>Independent review<br/>No tools"])
+        Workflow(["RunService + InvestigationWorkflow<br/>@SequenceAgent"])
+        Investigator(["InvestigatorAgent<br/>@Agent · @McpToolBox"])
+        Reviewer(["ReviewerAgent<br/>@Agent · Independent review<br/>No tools"])
         Approval(["Human approval gate<br/>Approve / reject"])
 
         Workflow -->|1 · Investigate| Investigator
@@ -136,9 +136,13 @@ The numbered branches show the workflow stages in order: investigation, independ
 
 The runtime gathers three baseline evidence records before invoking the investigator, so the reviewer also receives independently collected observations. These baseline calls are distinguished from the agent's own dynamic calls in the execution trace. The gateway decision log contains both. Tool results and model output are treated as untrusted content and rendered as text in the SPA.
 
+The Agentic API is declared in [InvestigatorAgent](agent-runtime/src/main/java/com/danieloh/demo/runtime/InvestigatorAgent.java), [ReviewerAgent](agent-runtime/src/main/java/com/danieloh/demo/runtime/ReviewerAgent.java), and [InvestigationWorkflow](agent-runtime/src/main/java/com/danieloh/demo/runtime/InvestigationWorkflow.java). `@SequenceAgent` invokes the investigator and then the reviewer, passing `finding` through a fresh `AgenticScope` and returning `report`. Independent baseline `evidence` is a separate workflow input. Both leaf agents retain `@RegisterAiService` to configure tool limits and disable shared chat memory; the reviewer explicitly disables its tool provider.
+
+[RunStageInterceptor](agent-runtime/src/main/java/com/danieloh/demo/runtime/RunStageInterceptor.java) checks persisted run status before and after each agent and records stage events. A timed-out or interrupted investigation cannot proceed to review. `RunService` owns the 150-second deadline, persistence, and approval endpoint. Human approval happens after the sequence returns and is required before the separate write credential can create a follow-up. Rehearsal mode bypasses the Agentic workflow and makes no model calls.
+
 | Module | Responsibility | Internal port |
 |---|---|---|
-| `agent-runtime` | SPA, API, two AI services, execution deadline, persisted history, human decisions | 8090 |
+| `agent-runtime` | SPA, API, two `@Agent` methods and their sequence, execution deadline, persisted history, human decisions | 8090 |
 | `policy-gateway` | MCP request policy, credential separation, rate limiter, tool discovery filtering, audit | 8091 |
 | `mcp-tools` | MCP tools, Flyway schema migrations, database-backed operations | 8092 |
 | `shared` | Small JDBC and constant-time credential utilities | — |
@@ -192,7 +196,7 @@ npm run test:access          # isolated browser authentication checks; no servic
 npm run test:ui              # requires running local stack and .env
 ```
 
-Smoke/UI checks create seeded runs and follow-up tasks; they intentionally remain in history. Unit/API tests use mocks where appropriate; the smoke suite exercises the actual packaged services and PostgreSQL. Test cases include unauthorized API access, invalid input, tool escalation, JSON/SSE tool filtering, rate limiting, OIDC approval roles, concurrent approval, retries and rejection. Tests do not call a paid model by default.
+Smoke/UI checks create seeded runs and follow-up tasks; they intentionally remain in history. Unit/API tests use mocks where appropriate; the smoke suite exercises the actual packaged services and PostgreSQL. Test cases include unauthorized API access, invalid input, tool escalation, JSON/SSE tool filtering, rate limiting, OIDC approval roles, concurrent approval, retries and rejection. Agentic integration tests exercise the generated sequence with a mocked model and a local MCP server, covering evidence handoff, reviewer tool isolation, tool-call limits, cancellation, and isolation between runs. Tests do not call a paid model by default.
 
 The immutable `run_id` is also the unique key for the follow-up. A write requires a persisted approval timestamp and an eligible run state inside the MCP tool's SQL statement. A timeout after commit is reconciled by checking the database before retrying. The only supported write is creating a follow-up; there is no arbitrary SQL, shell command, restart or production remediation tool.
 
@@ -247,6 +251,7 @@ Quarkus **3.39.3** was the latest stable release verified on **2026-09-16**. Pos
 
 - [Quarkus releases](https://quarkus.io/releases/)
 - [Quarkus LangChain4j MCP integration](https://docs.quarkiverse.io/quarkus-langchain4j/dev/mcp.html)
+- [Quarkus LangChain4j Agentic API](https://docs.quarkiverse.io/quarkus-langchain4j/dev/agentic.html)
 - [Quarkus MCP HTTP transport](https://docs.quarkiverse.io/quarkus-mcp-server/dev/getting-started-http.html)
 - [Quarkus OIDC bearer authentication](https://quarkus.io/guides/security-oidc-bearer-token-authentication)
 - [IBM DataPower Gateway containers](https://www.ibm.com/docs/en/datapower-gateway/11.0.0?topic=virtual-datapower-gateway-docker)

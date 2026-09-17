@@ -1,8 +1,10 @@
 package com.danieloh.demo.runtime;
 
+import dev.langchain4j.agentic.Agent;
 import dev.langchain4j.service.*;
 import io.quarkiverse.langchain4j.RegisterAiService;
 import jakarta.enterprise.context.ApplicationScoped;
+import java.util.UUID;
 
 @ApplicationScoped
 @RegisterAiService(chatMemoryProviderSupplier=RegisterAiService.NoChatMemoryProviderSupplier.class,
@@ -15,5 +17,11 @@ public interface ReviewerAgent {
         Distinguish suspected cause from proven observations. State that the human can approve creating a follow-up
         task, and that no infrastructure changes have been performed. Never approve actions yourself.
         """)
-    String review(@UserMessage String evidence);
+    @UserMessage("""
+        Verified database evidence: {{evidence}}
+        Investigator assessment: {{finding}}
+        """)
+    @Agent(name="reviewer", description="Review the investigation against independently collected evidence", outputKey="report")
+    @RunStage
+    String review(@V("runId") UUID runId, @V("evidence") String evidence, @V("finding") String finding);
 }

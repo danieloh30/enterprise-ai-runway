@@ -38,7 +38,9 @@ class DemoResourceTest {
  @Test void blueprintDeclaresTemplateOriginAndDoesNotEchoSecrets(){
   given().header("Authorization",AUTH).contentType("application/json").body(Map.of("prompt","Build a safe incident agent"))
    .post("/api/blueprint").then().statusCode(200).body("generator",containsString("templates"))
-   .body("bobPrompt",containsString("human approval")).body(not(containsString("test-presenter-key")));
+   .body("bobPrompt",containsString("human approval")).body("bobPrompt",containsString("@SequenceAgent"))
+   .body("files.'InvestigatorAgent.java'",containsString("@Agent("))
+   .body(not(containsString("test-presenter-key")));
  }
  @Test void unknownProbeIsRejected(){
   given().header("Authorization",AUTH).contentType("application/json").post("/api/probes/arbitrary").then().statusCode(400);
