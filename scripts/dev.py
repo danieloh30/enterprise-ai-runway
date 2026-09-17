@@ -19,6 +19,13 @@ APP = 'enterprise-ai-runway'
 SERVICES = [('mcp-tools', 8092, 5007), ('policy-gateway', 8091, 5006), ('agent-runtime', 8090, 5005)]
 LEGACY = ['runway-agent', 'runway-gateway', 'runway-tools']
 
+# Real IBM DataPower Gateway container that fronts the policy-gateway for the demo.
+# GATEWAY_MODE=simulator skips it and points the runtime straight at policy-gateway.
+DATAPOWER = 'runway-datapower'
+DATAPOWER_IMAGE = os.environ.get('DATAPOWER_IMAGE', 'icr.io/cpopen/datapower/datapower-limited:10.6.0.0')
+DATAPOWER_PORT = int(os.environ.get('DATAPOWER_PORT', '8788'))
+GATEWAY_MODE = os.environ.get('GATEWAY_MODE', 'datapower').strip().lower()
+
 
 def say(message):
     print(message, flush=True)
@@ -188,6 +195,45 @@ def database(supervisor):
     raise RuntimeError('PostgreSQL did not become ready within 60 seconds.')
 
 
+def datapower_ready(supervisor, timeout=360):
+    # The published host port is held open by Podman even before DataPower listens,
+    # so readiness means the front-side handler answers HTTP (any status), not a bare
+    # TCP connect. A 502 here is fine: it proves DataPower is up and forwarding.
+    deadline = time.monotonic() + timeout
+    http = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    probe = urllib.request.Request(f'http://127.0.0.1:{DATAPOWER_PORT}/mcp', data=b'{}',
+                                   headers={'Content-Type': 'application/json'}, method='POST')
+    while time.monotonic() < deadline:
+        supervisor.check()
+        try:
+            http.open(probe, timeout=3).close()
+            return
+        except urllib.error.HTTPError:
+            return
+        except (OSError, urllib.error.URLError):
+            pass
+        time.sleep(1)
+    raise RuntimeError(f'DataPower did not accept traffic on port {DATAPOWER_PORT} within {timeout} seconds; see [datapower] output.')
+
+
+def datapower(supervisor):
+    existing = container(DATAPOWER)
+    if existing is None:
+        if podman('image', 'exists', DATAPOWER_IMAGE, check=False).returncode:
+            say(f'[datapower] Pulling {DATAPOWER_IMAGE} (~1.5 GB, one time). This can take several minutes.')
+            supervisor.command('datapower', ['podman', 'pull', '--platform', 'linux/amd64', DATAPOWER_IMAGE])
+        say('[datapower] Starting IBM DataPower Gateway. Emulated boot on Apple Silicon can take 1-3 minutes.')
+        supervisor.command('datapower', [
+            'podman', 'run', '-d', '--name', DATAPOWER, '--label', f'app={APP}',
+            '--platform', 'linux/amd64', '-e', 'DATAPOWER_ACCEPT_LICENSE=true', '-e', 'DATAPOWER_INTERACTIVE=true',
+            '-p', f'127.0.0.1:{DATAPOWER_PORT}:8788',
+            '-v', f'{ROOT / "deploy" / "datapower" / "config"}:/opt/ibm/datapower/drouter/config:ro,Z',
+            '--memory=4g', DATAPOWER_IMAGE])
+    else:
+        say('[datapower] Reusing the existing DataPower container.')
+        podman('start', DATAPOWER)
+
+
 def up(lock):
     if not acquire(lock):
         raise RuntimeError('The demo is already running. Use ./demo.sh status or ./demo.sh down.')
@@ -196,12 +242,24 @@ def up(lock):
     for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
         signal.signal(sig, supervisor.request_stop)
     db_started = False
+    use_datapower = GATEWAY_MODE != 'simulator'
+    if use_datapower:
+        # DataPower fronts the policy-gateway; the runtime targets it and the gateway must
+        # accept traffic from the container, so it binds all interfaces instead of loopback.
+        gateway_url = os.environ.get('MCP_GATEWAY_URL', f'http://127.0.0.1:{DATAPOWER_PORT}')
+        gateway_kind = os.environ.get('GATEWAY_KIND', 'IBM DataPower Gateway (local container)')
+        gateway_bind = '0.0.0.0'
+    else:
+        gateway_url = os.environ.get('MCP_GATEWAY_URL', 'http://127.0.0.1:8091')
+        gateway_kind = os.environ.get('GATEWAY_KIND', 'Local policy simulator')
+        gateway_bind = '127.0.0.1'
     try:
         podman('info')
         for name in LEGACY:
             stop_container(name)
-        for _, port, debug in SERVICES:
-            for available_port in (port, debug):
+        ports = [(port, debug) for _, port, debug in SERVICES]
+        for port_pair in ports:
+            for available_port in port_pair:
                 with socket.socket() as probe:
                     probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                     try:
@@ -211,6 +269,9 @@ def up(lock):
         say('Starting Quarkus Dev Mode. Logs stream here; Ctrl+C or ./demo.sh down stops the demo.')
         db_started = True
         db_url = database(supervisor)
+        # Launch DataPower now so its slow emulated boot overlaps the Maven and Quarkus startup.
+        if use_datapower:
+            datapower(supervisor)
         # Install just the shared library/parent, so module launches also work on a fresh checkout.
         build_env = dict(os.environ)
         for key in ('OPENAI_API_KEY', 'LLM_API_KEY', 'DB_PASSWORD', 'DEMO_API_KEY',
@@ -220,7 +281,7 @@ def up(lock):
         for name, port, debug in SERVICES:
             env = dict(build_env, DB_URL=db_url, DB_USER='runway', DB_PASSWORD=os.environ['DB_PASSWORD'],
                        MCP_BACKEND_URL=os.environ.get('MCP_BACKEND_URL', 'http://127.0.0.1:8092'),
-                       MCP_GATEWAY_URL=os.environ.get('MCP_GATEWAY_URL', 'http://127.0.0.1:8091'))
+                       MCP_GATEWAY_URL=gateway_url, GATEWAY_KIND=gateway_kind)
             keys = {'mcp-tools': ['BACKEND_KEY'],
                     'policy-gateway': ['BACKEND_KEY', 'GATEWAY_READ_KEY', 'GATEWAY_WRITE_KEY'],
                     'agent-runtime': ['DEMO_API_KEY', 'GATEWAY_READ_KEY', 'GATEWAY_WRITE_KEY',
@@ -228,12 +289,17 @@ def up(lock):
             for key in keys:
                 if key in os.environ:
                     env[key] = os.environ[key]
+            # Only policy-gateway must be reachable from the DataPower container; others stay on loopback.
+            http_host = gateway_bind if name == 'policy-gateway' else '127.0.0.1'
             supervisor.spawn(name, [
                 './mvnw', '-B', '-f', f'{name}/pom.xml', 'quarkus:dev', f'-Ddebug={debug}',
-                '-Dquarkus.http.host=127.0.0.1', f'-Dquarkus.http.port={port}',
+                f'-Dquarkus.http.host={http_host}', f'-Dquarkus.http.port={port}',
                 '-Dquarkus.console.enabled=false', '-Dquarkus.console.color=false',
                 '-Dquarkus.test.continuous-testing=disabled'], env, service=True)
             supervisor.ready(name, port)
+        if use_datapower:
+            datapower_ready(supervisor)
+            say(f'[datapower] Ready: MCP ingress on http://127.0.0.1:{DATAPOWER_PORT}/mcp forwards to policy-gateway.')
         say('\nDemo ready: http://localhost:8090\nDev UI: http://localhost:8090/q/dev-ui\n'
             'Logs continue below. Run ./demo.sh smoke in another terminal for an optional flow check.\n')
         while True:
@@ -245,6 +311,8 @@ def up(lock):
         supervisor.close()
         if db_started:
             stop_container('runway-db')
+            if use_datapower:
+                stop_container(DATAPOWER)
         (RUN / 'dev.stop').unlink(missing_ok=True)
         say('Demo stopped. Database volume and history retained.')
 
@@ -258,8 +326,8 @@ def down(lock):
             if time.monotonic() >= deadline:
                 raise RuntimeError('Shutdown is still in progress; check the ./demo.sh up terminal.')
             time.sleep(.2)
-    # Also supports stopping the four containers from the old launcher.
-    for name in [*LEGACY, 'runway-db']:
+    # Also supports stopping the containers from the old launcher and the DataPower gateway.
+    for name in [*LEGACY, 'runway-db', DATAPOWER]:
         stop_container(name)
     (RUN / 'dev.stop').unlink(missing_ok=True)
     say('Demo stopped. Database volume and history retained.')

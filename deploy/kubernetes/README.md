@@ -1,11 +1,18 @@
 # Kubernetes deployment templates
 
+> The **local demo does not use Kubernetes**. `./demo.sh up` runs everything on the laptop
+> with Podman, including a real IBM DataPower Gateway container in front of the policy
+> service (see [`../datapower`](../datapower)). These manifests are the **production-topology
+> reference** for deploying the same services to a cluster; they intentionally do not
+> include DataPower — front the policy service with your entitled DataPower / API Connect
+> deployment as described in [`../datapower`](../datapower).
+
 `services.yaml` contains three one-replica Deployments, ClusterIP Services and ingress NetworkPolicies in a restricted namespace. These manifests have not been deployed to a real cluster. No public ingress is supplied; expose the app through your approved TLS ingress after identity and management-endpoint restrictions are configured. Port forwarding can be used for a private demonstration.
 
 1. Build the root Maven reactor. Build/push an image for each module using the root `Containerfile` and `--build-arg MODULE=<module>`. Replace the example image references with your registry's tested digests. The repository push does not publish container images.
 2. Provision an external PostgreSQL database. Apply Flyway migrations from `mcp-tools/src/main/resources/db/migration` using a migration identity before starting pods. Application pods disable migration-at-start. Use separate least-privilege database roles as described in `docs/production.md`.
 3. Create the namespace and three Secrets from your secret manager. Do not commit plaintext Secrets. All three need `DB_URL`, `DB_USER`, `DB_PASSWORD`.
-4. `runway-runtime` additionally needs `DEMO_API_KEY` (a disabled/unusable placeholder if OIDC is enabled), `GATEWAY_READ_KEY`, `GATEWAY_WRITE_KEY`, `MCP_GATEWAY_URL=http://runway-gateway:8091`, `OPENAI_API_KEY` from a Secret (or `LLM_API_KEY` for another compatible provider), optional `LLM_BASE_URL` and `LLM_MODEL`, `LOCAL_AUTO_CONNECT=false`, `OIDC_ENABLED=true`, `OIDC_AUTH_SERVER_URL`, `OIDC_CLIENT_ID`. Set `GATEWAY_KIND` to the actual gateway arrangement.
+4. `runway-runtime` additionally needs `DEMO_API_KEY` (a disabled/unusable placeholder if OIDC is enabled), `GATEWAY_READ_KEY`, `GATEWAY_WRITE_KEY`, `MCP_GATEWAY_URL` (point at your DataPower `/mcp` endpoint without the `/mcp` suffix, or `http://runway-gateway:8091` to reach the policy service directly), `OPENAI_API_KEY` from a Secret (or `LLM_API_KEY` for another compatible provider), optional `LLM_BASE_URL` and `LLM_MODEL`, `LOCAL_AUTO_CONNECT=false`, `OIDC_ENABLED=true`, `OIDC_AUTH_SERVER_URL`, `OIDC_CLIENT_ID`. Set `GATEWAY_KIND` to the actual gateway arrangement.
 5. `runway-gateway` additionally needs `GATEWAY_READ_KEY`, `GATEWAY_WRITE_KEY`, `BACKEND_KEY`, `MCP_BACKEND_URL=http://runway-tools:8092`.
 6. `runway-tools` additionally needs `BACKEND_KEY`.
 7. Install a NetworkPolicy-capable CNI. Apply `services.yaml`, inspect rollouts and health. Use TLS/mTLS or your service mesh for internal traffic before production use.

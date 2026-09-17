@@ -12,7 +12,7 @@ Verified locally on 2026-09-16 on an Apple Silicon Mac with Temurin Java 25.0.1,
 
 The verification process caught an API authentication path-normalization bug, corrected it, and verified the regression with HTTP-level tests before publication.
 
-The native laptop uses a local policy simulator. No actual IBM DataPower appliance, IBM Bob IDE interaction, Kubernetes cluster, organization OIDC issuer, load test or model safety evaluation was available as part of this verification. Deployment references document the required integration work. The SPA's blueprint generation is explicitly template based; rehearsal mode is explicitly non-LLM.
+The laptop demo runs a real IBM DataPower Gateway container (the free developers-limited edition, emulated on Apple Silicon) in front of a Quarkus policy service; `GATEWAY_MODE=simulator` uses the policy service alone. No entitled/production DataPower appliance, IBM Bob IDE interaction, Kubernetes cluster, organization OIDC issuer, load test or model safety evaluation was available as part of this verification. Deployment references document the required integration work. The SPA's blueprint generation is explicitly template based; rehearsal mode is explicitly non-LLM.
 
 ## OpenAI defaults and dependency automation
 
