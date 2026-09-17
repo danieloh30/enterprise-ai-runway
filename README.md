@@ -6,7 +6,7 @@ The SPA walks through the slide's three ideas: design with IBM Bob, secure MCP t
 
 ![Runway desktop interface](docs/images/runway-ui.png)
 
-## Start on an M4 Mac
+## Start locally with Quarkus Dev Mode
 
 Install a **JDK 25** and **Podman**, and configure an **OpenAI API key** for live AI. Maven is supplied by the checked-in wrapper. Bash, OpenSSL and Python 3 are used by the launcher and smoke checks. Node.js is needed only for optional UI tests.
 
