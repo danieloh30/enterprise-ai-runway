@@ -1,6 +1,6 @@
 # Enterprise AI Runway
 
-**From prompt to governed agent execution in 15 minutes.** A complete Java 25 / Quarkus 3.39.3 Maven demo for IBM TechXchange 2026, built for Apple Silicon and local Podman.
+**From prompt to governed agent execution in 15 minutes.**
 
 The SPA walks through the slide's three ideas: design with IBM Bob, secure MCP traffic at a gateway, and run Quarkus / LangChain4j agents against enterprise tools. An incident investigator reads PostgreSQL evidence; an independent reviewer checks its conclusions; a human decides whether to create a follow-up task.
 
