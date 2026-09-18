@@ -76,8 +76,13 @@ public class DemoResource {
                 }
             }
             """;
-        String bob="Inspect this Enterprise AI Runway project (a Quarkus Maven reactor) and build with ./mvnw. "+request.prompt()
-            +" The investigator already reaches tools through the IBM DataPower gateway (the MCP client targets ${MCP_GATEWAY_URL}/mcp, which DataPower reverse-proxies to the policy service) — extend that path, don't rebuild it, and keep every tool call flowing through the gateway. Keep the existing package layout and the @Agent / @SequenceAgent workflow. Add only parameterized, bounded read tools, and extend the gateway allowlist and argument validation to match. Keep human approval and idempotency for writes. Add tests that authorized reads pass and write escalation still fails, update the README, and explain your changes before applying them. Never use real credentials or bypass gateway policy.";
+        String bob="Inspect this Enterprise AI Runway project and build with ./mvnw. "+request.prompt()
+            +"\n\nThe investigator already reaches tools through the IBM DataPower gateway (the MCP client targets ${MCP_GATEWAY_URL}/mcp, which DataPower reverse-proxies to the policy service) — extend that path, don't rebuild it, and keep every tool call flowing through the gateway."
+            +"\nKeep the existing package layout and the @Agent / @SequenceAgent workflow."
+            +"\nAdd only parameterized, bounded read tools, and extend the gateway allowlist and argument validation to match."
+            +"\nKeep human approval and idempotency for writes."
+            +"\nAdd tests that authorized reads pass and write escalation still fails, update the README, and explain your changes before applying them."
+            +"\nNever use real credentials or bypass gateway policy.";
         return Map.of("generator","Deterministic project templates — use the included prompt in IBM Bob for AI code generation",
             "prompt",request.prompt(),"bobPrompt",bob,"files",Map.of("application.properties",config,"InvestigatorAgent.java",java),
             "topology",Map.of("nodes",List.of("IBM Bob","Quarkus agents","IBM DataPower gateway","Policy service","MCP tools","PostgreSQL"),
