@@ -15,7 +15,8 @@ public class GatewayClient {
     @ConfigProperty(name="runway.gateway-url") String url;
     @ConfigProperty(name="runway.gateway-read-key") String readKey;
     @ConfigProperty(name="runway.gateway-write-key") String writeKey;
-    private final HttpClient http=HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build();
+    // DataPower's front-side handler is HTTP/1.1-only; pin the client so it does not attempt an h2c upgrade.
+    private final HttpClient http=HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).connectTimeout(Duration.ofSeconds(3)).build();
 
     public record Reply(int status, JsonNode body, String requestId) {}
 
