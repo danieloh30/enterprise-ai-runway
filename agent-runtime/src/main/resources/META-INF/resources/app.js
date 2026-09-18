@@ -115,6 +115,7 @@ function showArtifact(kind) {
 }
 $$('[data-artifact]').forEach((button) => button.addEventListener('click', () => showArtifact(button.dataset.artifact)));
 $('#copy-bob').addEventListener('click', (event) => action(event.currentTarget, async () => { await navigator.clipboard.writeText(state.blueprint.bobPrompt); toast('IBM Bob prompt copied.'); }));
+$('#copy-artifact').addEventListener('click', (event) => action(event.currentTarget, async () => { await navigator.clipboard.writeText($('#artifact-code').textContent); toast('Copied to clipboard.'); }));
 $('#download').addEventListener('click', () => {
   const url = URL.createObjectURL(new Blob([JSON.stringify(state.blueprint, null, 2)], { type: 'application/json' }));
   const link = document.createElement('a'); link.href = url; link.download = 'enterprise-ai-blueprint.json'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
