@@ -108,10 +108,44 @@ $('#generate').addEventListener('click', (event) => action(event.currentTarget, 
   $('#node-bob').classList.add('ready');
   toast('Blueprint assembled. Copy the handoff prompt into IBM Bob.');
 }));
+const TOPO_ICONS = {
+  'IBM Bob': { cls: 'bob-icon', glyph: '✦', sub: 'Design & generate' },
+  'Quarkus agents': { cls: 'quarkus-icon', glyph: 'Q<span>✦</span>', sub: 'Investigate + review' },
+  'IBM DataPower gateway': { cls: 'shield-icon', glyph: '◇<b>✓</b>', sub: 'Policy enforcement' },
+  'Policy service': { cls: 'policy-icon', glyph: '❖', sub: 'Allowlist + validation' },
+  'MCP tools': { cls: 'tools-icon', glyph: '⌘', sub: 'Bounded capabilities' },
+  'PostgreSQL': { cls: 'db-icon', glyph: '▤', sub: 'Seeded records' },
+};
+const TOPO_LINKS = { 'Quarkus agents→IBM DataPower gateway': 'MCP', 'IBM DataPower gateway→Policy service': 'reverse-proxy', 'Policy service→MCP tools': 'allowlisted', 'MCP tools→PostgreSQL': 'SQL' };
+function renderTopology(topology) {
+  const nodes = topology.nodes || [];
+  const flow = nodes.map((name, i) => {
+    const meta = TOPO_ICONS[name] || { cls: '', glyph: '◦', sub: '' };
+    const node = `<div class="topology-node"><span class="node-icon ${meta.cls}">${meta.glyph}</span><strong>${escape(name)}</strong><small>${escape(meta.sub)}</small></div>`;
+    if (i === nodes.length - 1) return node;
+    const generation = i === 0;
+    const label = generation ? 'generates' : (TOPO_LINKS[`${name}→${nodes[i + 1]}`] || 'MCP');
+    return `${node}<div class="connector${generation ? ' generation' : ''}"><span>${escape(label)}</span><i></i></div>`;
+  }).join('');
+  return `<div class="topology-heading"><span><span class="live-dot"></span> RUNTIME REQUEST PATH</span><span>${escape(topology.transport || '')}</span></div>`
+    + `<div class="topology-flow">${flow}</div>`
+    + `<div class="topology-footer"><span>↳ IBM Bob generates the code; runtime requests flow agents → DataPower → policy → tools → data.</span><span class="protocol">WRITE: ${escape((topology.writePolicy || '').toUpperCase())}</span></div>`;
+}
 function showArtifact(kind) {
   if (!state.blueprint) return;
   $$('[data-artifact]').forEach((button) => button.classList.toggle('active', button.dataset.artifact === kind));
-  $('#artifact-code').textContent = ({ topology: JSON.stringify(state.blueprint.topology, null, 2), java: state.blueprint.files['InvestigatorAgent.java'], config: state.blueprint.files['application.properties'], bob: state.blueprint.bobPrompt })[kind];
+  const visual = $('#artifact-visual');
+  if (kind === 'topology') {
+    visual.innerHTML = renderTopology(state.blueprint.topology);
+    visual.classList.remove('hidden');
+    $('#artifact-code').classList.add('hidden');
+    $('#copy-artifact').classList.add('hidden');
+    return;
+  }
+  visual.classList.add('hidden');
+  $('#artifact-code').classList.remove('hidden');
+  $('#copy-artifact').classList.remove('hidden');
+  $('#artifact-code').textContent = ({ java: state.blueprint.files['InvestigatorAgent.java'], config: state.blueprint.files['application.properties'], bob: state.blueprint.bobPrompt })[kind];
 }
 $$('[data-artifact]').forEach((button) => button.addEventListener('click', () => showArtifact(button.dataset.artifact)));
 $('#copy-bob').addEventListener('click', (event) => action(event.currentTarget, async () => { await navigator.clipboard.writeText(state.blueprint.bobPrompt); toast('IBM Bob prompt copied.'); }));

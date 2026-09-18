@@ -17,7 +17,10 @@ test('blueprint, actual gateway probes, rehearsal approval and persisted history
   await connect(page);
   await page.getByRole('button', { name: 'Build blueprint' }).click();
   await expect(page.locator('#artifact-panel')).toBeVisible();
-  await expect(page.locator('#artifact-code')).toContainText('human approval required');
+  await expect(page.locator('#artifact-visual')).toContainText('IBM DataPower gateway');
+  await expect(page.locator('#artifact-visual')).toContainText('HUMAN APPROVAL REQUIRED');
+  await page.getByRole('button', { name: 'IBM Bob prompt', exact: true }).click();
+  await expect(page.locator('#artifact-code')).toContainText('human approval');
   await expect(page.locator('#toast')).toBeHidden({ timeout: 8000 });
   await page.screenshot({ path: 'test-results/runway-desktop.png', fullPage: true });
   await page.getByRole('button', { name: 'Secure the path →', exact: true }).click();
