@@ -81,6 +81,7 @@ public class DemoResource {
             +"\nThe investigator already reaches tools through the IBM DataPower gateway (the MCP client targets ${MCP_GATEWAY_URL}/mcp, which DataPower reverse-proxies to the policy service) — extend that path, don't rebuild it, and keep every tool call flowing through the gateway."
             +"\nKeep the existing package layout and the @Agent / @SequenceAgent workflow."
             +"\nAdd only parameterized, bounded read tools, and extend the gateway allowlist and argument validation to match."
+            +"\nSurface each new read tool in the demo UI so it shows as an ALLOW row in the gateway decision log: add a GatewayClient.probe case, a matching /api/probes allowlist entry in DemoResource, and a Secure-panel probe button in index.html wired to it in app.js."
             +"\nKeep human approval and idempotency for writes."
             +"\nAdd tests that authorized reads pass and write escalation still fails, update the README, and explain your changes before applying them."
             +"\nNever use real credentials or bypass gateway policy.";
