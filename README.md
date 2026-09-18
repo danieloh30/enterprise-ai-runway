@@ -53,8 +53,8 @@ This is a hardened, runnable reference application. An actual production deploym
 | Time | Action | Point to land |
 |---|---|---|
 | 0:00–1:00 | Open Runway, start the presenter timer, explain the topology. | There is one governed runtime path to tools. |
-| 1:00–4:00 | Build a blueprint. Copy the prompt into IBM Bob; inspect one small code change and its test. | AI-assisted development begins with explicit architecture and constraints. |
-| 4:00–7:00 | Open **Secure the path**. Run the 401, 403 and 400 probes and inspect the actual decision log. | Authentication, authorization and validation are independently enforced. |
+| 1:00–4:00 | Build a blueprint. Copy the prompt into IBM Bob; inspect one small code change, its test, and the new probe button Bob wired into the UI. | AI-assisted development begins with explicit architecture and constraints. |
+| 4:00–7:00 | Open **Secure the path**. Run the 200, 401, 403 and 400 probes and inspect the actual decision log — including the ALLOW row for Bob's new read tool. | Authentication, authorization and validation are independently enforced. |
 | 7:00–11:00 | Select `INC-2042`, choose **Live AI**, start the investigation. Follow the trace and report. | Agents reason over real tool responses through MCP. |
 | 11:00–13:00 | Approve the follow-up. Reopen the run from history. | Human authority and idempotent execution live outside the model. |
 | 13:00–15:00 | Show the two Java agent interfaces and the MCP tool, and the `[datapower]` transactions in the launcher. Discuss scaling to an entitled DataPower / API Connect deployment. | The same application boundary already sits behind a real enterprise gateway. |
