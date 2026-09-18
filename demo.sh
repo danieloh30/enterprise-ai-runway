@@ -40,6 +40,13 @@ case "$command" in
   credentials) load; printf 'Presenter key: %s\n' "$DEMO_API_KEY" ;;
   status|down) exec python3 scripts/dev.py "$command" ;;
   smoke) load; python3 scripts/smoke.py ;;
-  help|-h|--help) printf 'Usage: ./demo.sh {init|up|credentials|status|down|smoke}\nup streams Quarkus Dev Mode logs; Ctrl+C stops the demo and preserves history.\nup also starts a real IBM DataPower Gateway container (amd64, emulated on Apple\nSilicon: ~1.5 GB one-time pull, 1-3 min boot). GATEWAY_MODE=simulator skips it.\n' ;;
+  reset)
+    if ! podman container exists runway-db 2>/dev/null; then
+      echo 'runway-db is not running. Start the demo with ./demo.sh up first.' >&2; exit 1
+    fi
+    podman exec runway-db psql -U runway -d runway -q \
+      -c 'TRUNCATE runs, followups, gateway_audit RESTART IDENTITY CASCADE;'
+    printf 'Cleared execution history, follow-ups and the gateway decision log. Seeded incidents are kept.\n' ;;
+  help|-h|--help) printf 'Usage: ./demo.sh {init|up|credentials|status|down|smoke|reset}\nup streams Quarkus Dev Mode logs; Ctrl+C stops the demo and preserves history.\nup also starts a real IBM DataPower Gateway container (amd64, emulated on Apple\nSilicon: ~1.5 GB one-time pull, 1-3 min boot). GATEWAY_MODE=simulator skips it.\nreset clears execution history and the gateway decision log for a clean demo run.\n' ;;
   *) echo "Unknown command: $command. Run ./demo.sh help." >&2; exit 2 ;;
 esac
