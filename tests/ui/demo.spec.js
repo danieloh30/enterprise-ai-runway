@@ -24,7 +24,7 @@ test('blueprint, actual gateway probes, rehearsal approval and persisted history
   await expect(page.locator('#toast')).toBeHidden({ timeout: 8000 });
   await page.screenshot({ path: 'test-results/runway-desktop.png', fullPage: true });
   await page.getByRole('button', { name: 'Secure the path →', exact: true }).click();
-  for (const [button, code] of [['Test 401 ↗', '401'], ['Test 403 ↗', '403'], ['Test 400 ↗', '400']]) {
+  for (const [button, code] of [['Test 200 OK ↗', '200'], ['Test 401 Unauthorized ↗', '401'], ['Test 403 Forbidden ↗', '403'], ['Test 400 Bad Request ↗', '400']]) {
     await page.getByRole('button', { name: button, exact: true }).click();
     await expect(page.locator('#probe-result')).toContainText(`Policy verified · HTTP ${code}`);
   }

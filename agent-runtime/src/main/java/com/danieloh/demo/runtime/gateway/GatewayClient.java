@@ -32,6 +32,7 @@ public class GatewayClient {
 
     public Reply probe(String kind) {
         return switch(kind) {
+            case "authorized-read" -> request(Map.of("jsonrpc","2.0","id",0,"method","tools/call","params",Map.of("name","get_incident","arguments",Map.of("incidentId","INC-2042"))),readKey);
             case "unauthorized" -> request(Map.of("jsonrpc","2.0","id",1,"method","ping"),"invalid-credential");
             case "forbidden-tool" -> request(Map.of("jsonrpc","2.0","id",2,"method","tools/call","params",Map.of("name","create_followup","arguments",Map.of("runId",UUID.randomUUID().toString()))),readKey);
             case "invalid-arguments" -> request(Map.of("jsonrpc","2.0","id",3,"method","tools/call","params",Map.of("name","get_incident","arguments",Map.of("incidentId","INC-2042' OR 1=1 --"))),readKey);

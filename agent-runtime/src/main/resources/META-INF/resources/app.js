@@ -161,10 +161,11 @@ $('#download').addEventListener('click', () => {
 });
 $$('[data-probe]').forEach((button) => button.addEventListener('click', () => action(button, async () => {
   const reply = await api(`/probes/${button.dataset.probe}`, { method: 'POST' });
-  const expected = { unauthorized: 401, 'forbidden-tool': 403, 'invalid-arguments': 400 }[button.dataset.probe];
+  const expected = { 'authorized-read': 200, unauthorized: 401, 'forbidden-tool': 403, 'invalid-arguments': 400 }[button.dataset.probe];
   const result = $('#probe-result');
   result.classList.remove('hidden'); result.classList.toggle('failure', reply.status !== expected);
-  result.textContent = `${reply.status === expected ? '✓ Policy verified' : 'Unexpected result'} · HTTP ${reply.status} · ${reply.body.error || 'See gateway logs'} · Request ${reply.requestId}`;
+  const detail = reply.body.error || (reply.status === 200 ? 'Authorized read allowed' : 'See gateway logs');
+  result.textContent = `${reply.status === expected ? '✓ Policy verified' : 'Unexpected result'} · HTTP ${reply.status} · ${detail} · Request ${reply.requestId}`;
   await refreshAudit();
 })));
 async function refreshAudit() {

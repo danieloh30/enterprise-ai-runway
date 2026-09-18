@@ -103,7 +103,7 @@ public class DemoResource {
     @POST @Path("/runs/{id}/approve") public JsonNode approve(@PathParam("id") UUID id) {return runs.approve(id);}
     @POST @Path("/runs/{id}/reject") public Map<String,String> reject(@PathParam("id") UUID id) {runs.reject(id);return Map.of("status","REJECTED");}
     @POST @Path("/probes/{kind}") public GatewayClient.Reply probe(@PathParam("kind") String kind) {
-        if(!Set.of("unauthorized","forbidden-tool","invalid-arguments").contains(kind))throw new BadRequestException("Unknown probe");
+        if(!Set.of("authorized-read","unauthorized","forbidden-tool","invalid-arguments").contains(kind))throw new BadRequestException("Unknown probe");
         return gateway.probe(kind);
     }
     @GET @Path("/audit") public List<JsonNode> audit() {return db.query("SELECT row_to_json(a) FROM (SELECT * FROM gateway_audit ORDER BY id DESC LIMIT 80) a");}
