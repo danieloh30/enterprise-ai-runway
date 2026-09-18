@@ -76,8 +76,9 @@ public class DemoResource {
                 }
             }
             """;
-        String bob="Inspect this Enterprise AI Runway project and build with ./mvnw. "+request.prompt()
-            +"\n\nThe investigator already reaches tools through the IBM DataPower gateway (the MCP client targets ${MCP_GATEWAY_URL}/mcp, which DataPower reverse-proxies to the policy service) — extend that path, don't rebuild it, and keep every tool call flowing through the gateway."
+        String bob=request.prompt()
+            +"\n\nInspect the existing Enterprise AI Runway project and build with ./mvnw."
+            +"\nThe investigator already reaches tools through the IBM DataPower gateway (the MCP client targets ${MCP_GATEWAY_URL}/mcp, which DataPower reverse-proxies to the policy service) — extend that path, don't rebuild it, and keep every tool call flowing through the gateway."
             +"\nKeep the existing package layout and the @Agent / @SequenceAgent workflow."
             +"\nAdd only parameterized, bounded read tools, and extend the gateway allowlist and argument validation to match."
             +"\nKeep human approval and idempotency for writes."
