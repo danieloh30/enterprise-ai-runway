@@ -50,7 +50,7 @@ public class DemoResource {
         return db.query("SELECT json_build_object('id',id,'service',service,'severity',severity,'summary',summary,'status',status) FROM incidents ORDER BY id");
     }
     @POST @Path("/blueprint") public Map<String,Object> blueprint(@Valid @NotNull BlueprintRequest request) {
-        String config="quarkus.langchain4j.ai-service.max-tool-calling-round-trips=4\nquarkus.langchain4j.ai-service.max-tool-executions=${quarkus.langchain4j.ai-service.max-tool-calling-round-trips}\nquarkus.langchain4j.ai-service.max-tool-calls-per-response=3\nquarkus.langchain4j.mcp.enterprise.transport-type=streamable-http\nquarkus.langchain4j.mcp.enterprise.url=${MCP_GATEWAY_URL}/mcp\nquarkus.langchain4j.mcp.enterprise.header.Authorization=Bearer ${GATEWAY_READ_KEY}\n";
+        String config="# The MCP client connects to the IBM DataPower gateway (MCP_GATEWAY_URL); DataPower reverse-proxies MCP to the policy service.\nquarkus.langchain4j.ai-service.max-tool-calling-round-trips=4\nquarkus.langchain4j.ai-service.max-tool-executions=${quarkus.langchain4j.ai-service.max-tool-calling-round-trips}\nquarkus.langchain4j.ai-service.max-tool-calls-per-response=3\nquarkus.langchain4j.mcp.enterprise.transport-type=streamable-http\nquarkus.langchain4j.mcp.enterprise.url=${MCP_GATEWAY_URL}/mcp\nquarkus.langchain4j.mcp.enterprise.header.Authorization=Bearer ${GATEWAY_READ_KEY}\n";
         String java="""
             package com.danieloh.demo.runtime.agents;
 
@@ -77,11 +77,11 @@ public class DemoResource {
             }
             """;
         String bob="Inspect this Quarkus Maven reactor and its existing tests. Use the Java release and Quarkus platform version configured in the root pom.xml, and resolve extension versions from the project's POMs and imported BOMs. Work with those pinned versions and use ./mvnw for build and verification commands. "+request.prompt()
-            +" Follow the runtime packages: agents for agent interfaces, workflow for orchestration, api for REST endpoints, security for access control, and gateway for the MCP client. Use the existing @Agent methods and @SequenceAgent workflow. Keep all agent tool calls behind the MCP gateway. Expose only parameterized, bounded read tools to the investigator. Preserve separate human approval and idempotency for writes. Add meaningful tests, update README, and explain the changes before applying them. Do not use real credentials or bypass gateway policy.";
+            +" The investigator already reaches enterprise tools through the IBM DataPower gateway: the LangChain4j MCP client targets ${MCP_GATEWAY_URL}/mcp, which DataPower reverse-proxies to the policy service. Extend that working path rather than rebuilding it, and keep every agent tool call flowing through DataPower and the policy service; never point the MCP client directly at the mcp-tools server. Follow the runtime packages: agents for agent interfaces, workflow for orchestration, api for REST endpoints, security for access control, and gateway for the MCP client. Use the existing @Agent methods and @SequenceAgent workflow. Expose only parameterized, bounded read tools to the investigator, and extend the gateway read-tool allowlist and argument validation for anything you add. Preserve separate human approval and idempotency for writes. Add tests proving authorized reads succeed and write escalation still fails through the gateway, update the README, and explain the changes before applying them. Do not use real credentials or bypass gateway policy.";
         return Map.of("generator","Deterministic project templates — use the included prompt in IBM Bob for AI code generation",
             "prompt",request.prompt(),"bobPrompt",bob,"files",Map.of("application.properties",config,"InvestigatorAgent.java",java),
-            "topology",Map.of("nodes",List.of("IBM Bob","Quarkus agents","Policy gateway","MCP tools","PostgreSQL"),
-                "runtimePath",List.of("Quarkus agents","Policy gateway","MCP tools","PostgreSQL"),"transport","MCP Streamable HTTP","writePolicy","human approval required"));
+            "topology",Map.of("nodes",List.of("IBM Bob","Quarkus agents","IBM DataPower gateway","Policy service","MCP tools","PostgreSQL"),
+                "runtimePath",List.of("Quarkus agents","IBM DataPower gateway","Policy service","MCP tools","PostgreSQL"),"transport","MCP Streamable HTTP","writePolicy","human approval required"));
     }
     @POST @Path("/runs") public Response start(@Valid @NotNull StartRequest request) {
         if ("live".equals(request.mode()) && !modelConfigured()) {
