@@ -57,7 +57,7 @@ This is a hardened, runnable reference application. An actual production deploym
 | 4:00–7:00 | Open **Secure the path**. Run the 200, 401, 403 and 400 probes and inspect the actual decision log — including the ALLOW row for Bob's new read tool. | Authentication, authorization and validation are independently enforced. |
 | 7:00–11:00 | Select `INC-2042`, choose **Live AI**, start the investigation. Follow the trace and report. | Agents reason over real tool responses through MCP. |
 | 11:00–13:00 | Approve the follow-up. Reopen the run from history. | Human authority and idempotent execution live outside the model. |
-| 13:00–15:00 | Show the two Java agent interfaces (`InvestigatorAgent` / `ReviewerAgent`) and the MCP tool (`EnterpriseTools`), the launcher's `[datapower] Ready: MCP ingress … forwards to policy-gateway` line, and raw gateway records via `podman logs runway-datapower`. Discuss scaling to an entitled DataPower / API Connect deployment. | The same application boundary already sits behind a real enterprise gateway. |
+| 13:00–15:00 | Show the two Java agent interfaces (`InvestigatorAgent` / `ReviewerAgent`) and the MCP tool (`EnterpriseTools`), then open the **IBM DataPower WebGUI** (`https://127.0.0.1:9090`, login `admin`/`admin`) to show the live MCP gateway object and DataPower's own transaction log (or `podman logs runway-datapower` from the CLI). Discuss scaling to an entitled DataPower / API Connect deployment. | The same application boundary already sits behind a real enterprise gateway. |
 
 Detailed narration and recovery cues: [presenter runbook](docs/demo-runbook.md). A practical live coding prompt: [IBM Bob prompt](docs/ibm-bob-prompt.md).
 
@@ -153,6 +153,26 @@ agent-runtime  :8090
 The DataPower hop is a **real IBM DataPower Gateway process**, not a dummy or in-code stub. `agent-runtime` opens its MCP connection to the container (`MCP_GATEWAY_URL=http://127.0.0.1:8788`); DataPower enforces its front-side handler limits and reverse-proxies `/mcp` verbatim to the backend, preserving `Authorization`, `Content-Type`, `Accept` and the `Mcp-*` headers and adding no `Origin`. The `policy-gateway` behind it is **also a real Quarkus service** that independently enforces the security policy (bearer keys, read/write scoping, argument validation, rate limiting, persisted audit) — it has no awareness of DataPower and simply serves the forwarded requests. It is labelled a "policy simulator" only because it stands in for enterprise API-management **policy logic** in one small service, not because the traffic or the checks are faked.
 
 With `GATEWAY_MODE=simulator`, no DataPower container starts and `agent-runtime` connects straight to `policy-gateway :8091`. The policy service still runs for real; only the gateway in front of it is absent.
+
+The DataPower container also exposes its **WebGUI** at `https://127.0.0.1:9090` (default login `admin`/`admin`; self-signed cert, so the browser will warn) — a useful live view of the MCP gateway object, its front side handler, and DataPower's own transaction log. The management port is published to loopback only; change it with `DATAPOWER_MGMT_PORT`. Because container port mappings are fixed at creation, an existing `runway-datapower` container from before this was added must be recreated once to expose it: `podman rm runway-datapower && ./demo.sh up`.
+
+### Who enforces authentication, authorization and rate limits
+
+A common demo question is "does DataPower itself do the authN/authZ/rate-limiting?" The honest answer is that enforcement is **split**, and it helps to be explicit about it. In this local demo DataPower is the governed **front door** — it does protocol mediation and transport hardening (HTTP/1.1 only, method allow-list, `max-url-len` 16 KB, `max-total-header-len` 128 KB, timeouts, preserves `Authorization`, injects no `Origin`). The fine-grained MCP access policy is enforced immediately behind it by `policy-gateway`, which is where the 200/401/403/400/429 probes light up:
+
+| Control | How it works | Denied with |
+|---|---|---|
+| Authentication | Bearer-token match on two separate credentials — read key → principal `agent`, write key → `approver` (`GatewayResource`, constant-time `Secrets.matches`) | `401 INVALID_CREDENTIAL` |
+| Authorization (method) | JSON-RPC method allow-list: `initialize`, `ping`, `tools/list`, `tools/call` only (`GatewayPolicy`) | `403 METHOD_NOT_ALLOWED` |
+| Authorization (tool) | Per-principal tool allow-list — readers only `get_incident` / `get_service_metrics` / `get_runbook`; approver only `create_followup` | `403 TOOL_NOT_ALLOWED` |
+| Tool visibility | `tools/list` responses are filtered per principal, so an agent never even sees the write tool (`filterTools`) | — |
+| Input validation | Arguments must be exactly one field matching a strict regex (`INC-####` / UUID), plus JSON-RPC shape checks | `400 INVALID_TOOL_ARGUMENTS` / `400 INVALID_JSON_RPC` |
+| Rate limiting | Fixed 60 requests/minute/principal, separate read/write windows (`GATEWAY_RATE_LIMIT`, default 60) | `429 RATE_LIMIT_EXCEEDED` + `Retry-After: 60` |
+| Anti-CSRF / origin | Any `Origin` header (i.e. a browser) is rejected — MCP is service-to-service only | `403 BROWSER_ORIGIN_DENIED` |
+| Audit & observability | Every ALLOW/DENY row is persisted to `gateway_audit` + a Micrometer counter; each response carries `X-Request-Id`; **fails closed** if the audit store is unavailable | — |
+| Credential mediation | The caller's read/write key is swapped for a separate `BACKEND_KEY` before `mcp-tools` is called — the client credential never reaches the tools | — |
+
+Why split it this way: running a fully-configured DataPower AAA + SLM stack **emulated on an Apple Silicon laptop** would be slow and fragile live, so the demo keeps DataPower as the real front door and puts the concrete, inspectable policy logic in one small service you can point at row-by-row. In a production/entitled DataPower deployment, those same controls move **into** DataPower as native policy actions — authentication and authorization via an **AAA policy** (API key / JWT / OAuth introspection / LDAP / client cert → identity → allow-list or scopes), rate limiting via an **SLM (Service Level Monitoring)** action, input validation via **schema validation and JSON/XML threat protection**, audit via **log targets**, and credential mediation on the MPGW — and the backend service simplifies accordingly.
 
 The runtime gathers three baseline evidence records before invoking the investigator, so the reviewer also receives independently collected observations. These baseline calls are distinguished from the agent's own dynamic calls in the execution trace. The gateway decision log contains both. Tool results and model output are treated as untrusted content and rendered as text in the SPA.
 

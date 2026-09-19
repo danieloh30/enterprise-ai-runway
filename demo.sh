@@ -17,6 +17,8 @@ LLM_MODEL=gpt-4.1-mini
 # it runs emulated on Apple Silicon: a ~1.5 GB one-time pull and a 1-3 minute boot.
 DATAPOWER_IMAGE=icr.io/cpopen/datapower/datapower-limited:10.6.0.0
 DATAPOWER_PORT=8788
+# DataPower WebGUI: https://127.0.0.1:9090 (login admin/admin) to browse the gateway live.
+DATAPOWER_MGMT_PORT=9090
 # Skip DataPower and use the bundled Quarkus policy simulator (offline/slow venues):
 #   GATEWAY_MODE=simulator ./demo.sh up
 # Leave GATEWAY_MODE and GATEWAY_KIND out of this file so that override still works.
@@ -47,6 +49,6 @@ case "$command" in
     podman exec runway-db psql -U runway -d runway -q \
       -c 'TRUNCATE runs, followups, gateway_audit RESTART IDENTITY CASCADE;'
     printf 'Cleared execution history, follow-ups and the gateway decision log. Seeded incidents are kept.\n' ;;
-  help|-h|--help) printf 'Usage: ./demo.sh {init|up|credentials|status|down|smoke|reset}\nup streams Quarkus Dev Mode logs; Ctrl+C stops the demo and preserves history.\nup also starts a real IBM DataPower Gateway container (amd64, emulated on Apple\nSilicon: ~1.5 GB one-time pull, 1-3 min boot). GATEWAY_MODE=simulator skips it.\nreset clears execution history and the gateway decision log for a clean demo run.\n' ;;
+  help|-h|--help) printf 'Usage: ./demo.sh {init|up|credentials|status|down|smoke|reset}\nup streams Quarkus Dev Mode logs; Ctrl+C stops the demo and preserves history.\nup also starts a real IBM DataPower Gateway container (amd64, emulated on Apple\nSilicon: ~1.5 GB one-time pull, 1-3 min boot). GATEWAY_MODE=simulator skips it.\nThe DataPower WebGUI is at https://127.0.0.1:9090 (login admin/admin).\nreset clears execution history and the gateway decision log for a clean demo run.\n' ;;
   *) echo "Unknown command: $command. Run ./demo.sh help." >&2; exit 2 ;;
 esac

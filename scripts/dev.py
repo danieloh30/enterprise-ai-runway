@@ -24,6 +24,7 @@ LEGACY = ['runway-agent', 'runway-gateway', 'runway-tools']
 DATAPOWER = 'runway-datapower'
 DATAPOWER_IMAGE = os.environ.get('DATAPOWER_IMAGE', 'icr.io/cpopen/datapower/datapower-limited:10.6.0.0')
 DATAPOWER_PORT = int(os.environ.get('DATAPOWER_PORT', '8788'))
+DATAPOWER_MGMT_PORT = int(os.environ.get('DATAPOWER_MGMT_PORT', '9090'))
 GATEWAY_MODE = os.environ.get('GATEWAY_MODE', 'datapower').strip().lower()
 
 
@@ -226,7 +227,7 @@ def datapower(supervisor):
         supervisor.command('datapower', [
             'podman', 'run', '-d', '--name', DATAPOWER, '--label', f'app={APP}',
             '--platform', 'linux/amd64', '-e', 'DATAPOWER_ACCEPT_LICENSE=true', '-e', 'DATAPOWER_INTERACTIVE=true',
-            '-p', f'127.0.0.1:{DATAPOWER_PORT}:8788',
+            '-p', f'127.0.0.1:{DATAPOWER_PORT}:8788', '-p', f'127.0.0.1:{DATAPOWER_MGMT_PORT}:9090',
             '-v', f'{ROOT / "deploy" / "datapower" / "config"}:/opt/ibm/datapower/drouter/config:ro,Z',
             '--memory=4g', DATAPOWER_IMAGE])
     else:
@@ -300,6 +301,7 @@ def up(lock):
         if use_datapower:
             datapower_ready(supervisor)
             say(f'[datapower] Ready: MCP ingress on http://127.0.0.1:{DATAPOWER_PORT}/mcp forwards to policy-gateway.')
+            say(f'[datapower] WebGUI: https://127.0.0.1:{DATAPOWER_MGMT_PORT} (login admin/admin; self-signed cert warning is expected).')
         say('\nDemo ready: http://localhost:8090\nDev UI: http://localhost:8090/q/dev-ui\n'
             'Logs continue below. Run ./demo.sh smoke in another terminal for an optional flow check.\n')
         while True:
