@@ -57,7 +57,7 @@ This is a hardened, runnable reference application. An actual production deploym
 | 4:00–7:00 | Open **Secure the path**. Run the 200, 401, 403 and 400 probes and inspect the actual decision log — including the ALLOW row for Bob's new read tool. | Authentication, authorization and validation are independently enforced. |
 | 7:00–11:00 | Select `INC-2042`, choose **Live AI**, start the investigation. Follow the trace and report. | Agents reason over real tool responses through MCP. |
 | 11:00–13:00 | Approve the follow-up. Reopen the run from history. | Human authority and idempotent execution live outside the model. |
-| 13:00–15:00 | Show the two Java agent interfaces (`InvestigatorAgent` / `ReviewerAgent`) and the MCP tool (`EnterpriseTools`), then open the **IBM DataPower WebGUI** (`https://127.0.0.1:9090`, login `admin`/`admin`) to show the live MCP gateway object and DataPower's own transaction log (or `podman logs runway-datapower` from the CLI). Discuss scaling to an entitled DataPower / API Connect deployment. | The same application boundary already sits behind a real enterprise gateway. |
+| 13:00–15:00 | Show the two Java agent interfaces (`InvestigatorAgent` / `ReviewerAgent`) and the MCP tool (`EnterpriseTools`), then open the **IBM DataPower WebGUI** (`https://127.0.0.1:9090`, login `admin`/`admin`) → **Multi-Protocol Gateway → `mcp-gateway`** for the live object, and **System Log filtered by `mpgw`** for DataPower's own transaction trace (see [Driving the DataPower WebGUI](#driving-the-datapower-webgui-in-the-demo); raise the log level first). Discuss scaling to an entitled DataPower / API Connect deployment. | The same application boundary already sits behind a real enterprise gateway. |
 
 Detailed narration and recovery cues: [presenter runbook](docs/demo-runbook.md). A practical live coding prompt: [IBM Bob prompt](docs/ibm-bob-prompt.md).
 
@@ -155,6 +155,29 @@ The DataPower hop is a **real IBM DataPower Gateway process**, not a dummy or in
 With `GATEWAY_MODE=simulator`, no DataPower container starts and `agent-runtime` connects straight to `policy-gateway :8091`. The policy service still runs for real; only the gateway in front of it is absent.
 
 The DataPower container also exposes its **WebGUI** at `https://127.0.0.1:9090` (default login `admin`/`admin`; self-signed cert, so the browser will warn) — a useful live view of the MCP gateway object, its front side handler, and DataPower's own transaction log. The management port is published to loopback only; change it with `DATAPOWER_MGMT_PORT`. Because container port mappings are fixed at creation, an existing `runway-datapower` container from before this was added must be recreated once to expose it: `podman rm runway-datapower && ./demo.sh up`.
+
+### Driving the DataPower WebGUI in the demo
+
+The strongest artifact is still Runway's own **Gateway decision log** (`agent → get_incident → ALLOW·200`, `anonymous → ping → DENY·401`): it is clean, colourful, proves the whole path end-to-end (in DataPower mode a request only reaches `policy-gateway :8091` by transiting DataPower on `:8788` first), and needs no WebGUI fiddling. Lead with it. Use the WebGUI as the supporting "this is a real DataPower object" view.
+
+**Show the gateway object.** Left rail → **Services → Multi-Protocol Gateway → Edit Multi-Protocol Gateway → `mcp-gateway`**. This shows the real object: the front side handler (`mcp-fsh`, port 8788, HTTP/1.1-only), the backend URL (`http://host.containers.internal:8091` → the policy service) and the pass-through request/response type — all from `deploy/datapower/config/auto-startup.cfg`.
+
+**Show DataPower's own transaction trace.** A pass-through MPGW logs each transaction at `information` level, which the System Log hides by default, so you must raise the log level first:
+
+1. Raise the default log target's level to `information` (or `debug`). The change is a **runtime setting** — see the restart note below.
+2. Fire a **200 read probe** from **Secure the path** (the probe must happen *while* logging is raised — DataPower only logs what flows through after the change).
+3. Open **Status → Logs → System Log**, set **Filter by category → `mpgw`** (or type `mpgw` in Search), and read the transaction **bottom-up**:
+   - `source-http (mcp-fsh): Received HTTP/1.1 POST for /mcp` — the agent's call hits DataPower's front door (HTTP/1.1 confirmed).
+   - `mpgw (mcp-gateway): Transaction processing started […]` — a governed, uniquely-IDed transaction.
+   - `mpgw (mcp-gateway): Using Backside Server: http://host.containers.internal:8091/mcp` — DataPower forwards to the policy service (the split-enforcement handoff, visible).
+   - `mpgw (mcp-gateway): HTTP response code 200 …` — the backend's status, relayed faithfully. A `400` here is expected too: the launcher's readiness probe POSTs `{}`, which `policy-gateway` correctly rejects as `INVALID_JSON_RPC`.
+   - `latency` / `extlatency` / `api-stats: Response Finished` — DataPower's built-in per-phase observability.
+
+Set the log level back to `notice` after the demo so a fresh boot's log stays quiet.
+
+**Log level does not persist across a restart.** `./demo.sh down` runs `podman stop` and `./demo.sh up` runs `podman start` on the same container, which reboots DataPower and re-executes `auto-startup.cfg` from scratch. The config directory is mounted read-only, so even the WebGUI **Save** button cannot write the change back. Everything defined in `auto-startup.cfg` (the `mcp-gateway` object, the handler, the WebGUI, admin/admin) returns automatically, but the manual log-level bump must be redone after each `up`. Treat it as a two-click step in the run-of-show.
+
+**Skip the transaction Probe.** The service's built-in Probe / capture wizard fails in this edition (`Failed to create the capture setting`) because it depends on the `apic-gw-service` sidecar, which the developer/limited edition does not run — you will see it reported as stopped in the log. Use the log-level + System Log recipe above instead; it needs no sidecar. Red `webgui-ssl` / `webgui-manager` lines in the System Log are also expected: they are the self-signed-cert handshake and internal management plumbing, not the MCP data path.
 
 ### Who enforces authentication, authorization and rate limits
 
