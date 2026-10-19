@@ -57,7 +57,7 @@ This is a hardened, runnable reference application. An actual production deploym
 | 4:00–7:00 | Open **Secure the path**. Run the 200, 401, 403 and 400 probes and inspect the actual decision log — including the ALLOW row for Bob's new read tool. | Authentication, authorization and validation are independently enforced. |
 | 7:00–11:00 | Select `INC-2042`, choose **Live AI**, start the investigation. Follow the trace and report. | Agents reason over real tool responses through MCP. |
 | 11:00–13:00 | Approve the follow-up. Reopen the run from history. | Human authority and idempotent execution live outside the model. |
-| 13:00–15:00 | Show the two Java agent interfaces (`InvestigatorAgent` / `ReviewerAgent`) and the MCP tool (`EnterpriseTools`), then open the **IBM DataPower WebGUI** (`https://127.0.0.1:9090`, login `admin`/`admin`) → **Multi-Protocol Gateway → `mcp-gateway`** for the live object, and **System Log filtered by `mpgw`** for DataPower's own transaction trace (see [Driving the DataPower WebGUI](#driving-the-datapower-webgui-in-the-demo); raise the log level first). Discuss scaling to an entitled DataPower / API Connect deployment. | The same application boundary already sits behind a real enterprise gateway. |
+| 13:00–15:00 | Show the two Java agent interfaces (`InvestigatorAgent` / `ReviewerAgent`) and the MCP tool (`EnterpriseTools`), then open the **IBM DataPower WebGUI** (`https://127.0.0.1:9090`, login `admin`/`admin`) → **Multi-Protocol Gateway → `mcp-gateway`** for the live object, and **System Log searched for `mcp-gateway`** for DataPower's own transaction trace (see [Driving the DataPower WebGUI](#driving-the-datapower-webgui-in-the-demo); raise the log level first). Discuss scaling to an entitled DataPower / API Connect deployment. | The same application boundary already sits behind a real enterprise gateway. |
 
 Detailed narration and recovery cues: [presenter runbook](docs/demo-runbook.md). A practical live coding prompt: [IBM Bob prompt](docs/ibm-bob-prompt.md).
 
@@ -162,20 +162,23 @@ The strongest artifact is still Runway's own **Gateway decision log** (`agent �
 
 **Show the gateway object.** Left rail → **Services → Multi-Protocol Gateway → Edit Multi-Protocol Gateway → `mcp-gateway`**. This shows the real object: the front side handler (`mcp-fsh`, port 8788, HTTP/1.1-only), the backend URL (`http://host.containers.internal:8091` → the policy service) and the pass-through request/response type — all from `deploy/datapower/config/auto-startup.cfg`.
 
-**Show DataPower's own transaction trace.** A pass-through MPGW logs each transaction at `information` level, which the System Log hides by default, so you must raise the log level first:
+**Show DataPower's own transaction trace.** The default log captures errors and management notices; successful MCP calls need a more detailed capture level. The System Log's **Filter by level** only filters events already captured — it does not enable logging.
 
-1. Raise the default log target's level to `information` (or `debug`). The change is a **runtime setting** — see the restart note below.
-2. Fire a **200 read probe** from **Secure the path** (the probe must happen *while* logging is raised — DataPower only logs what flows through after the change).
-3. Open **Status → Logs → System Log**, set **Filter by category → `mpgw`** (or type `mpgw` in Search), and read the transaction **bottom-up**:
-   - `source-http (mcp-fsh): Received HTTP/1.1 POST for /mcp` — the agent's call hits DataPower's front door (HTTP/1.1 confirmed).
-   - `mpgw (mcp-gateway): Transaction processing started […]` — a governed, uniquely-IDed transaction.
-   - `mpgw (mcp-gateway): Using Backside Server: http://host.containers.internal:8091/mcp` — DataPower forwards to the policy service (the split-enforcement handoff, visible).
-   - `mpgw (mcp-gateway): HTTP response code 200 …` — the backend's status, relayed faithfully. A `400` here is expected too: the launcher's readiness probe POSTs `{}`, which `policy-gateway` correctly rejects as `INVALID_JSON_RPC`.
-   - `latency` / `extlatency` / `api-stats: Response Finished` — DataPower's built-in per-phase observability.
+1. In the `default` application domain, open **Administration → Debug → Troubleshooting → Logging → Set Log Level**. Choose **debug** and click that section's **Submit**. Use debug for this short diagnostic capture; individual transaction messages can have different levels. Leave internal logging and RBM debug logging off.
+2. Fire a **200 read probe** from **Secure the path** after submitting the change. Earlier requests cannot be recovered by changing the log level.
+3. Open **Status → Logs → System Log**, select **default-log**, leave category and level filters at **(none)**, enter **`mcp-gateway`** in Search, and click **Refresh**. This isolates the demo service, including its events in other categories. Searching `mpgw` also matches DataPower's internal management gateways.
+4. Find the new request by its timestamp and **tid** (DataPower transaction ID). Read its events in chronological order; with newest first, that means bottom-up. Look for transaction start, the backside URL (`http://host.containers.internal:8091/mcp`), the backend HTTP response code, and response completion/latency. Exact wording and categories vary with firmware and logging level. The 200 read probe should correspond to a successful policy decision in Runway's **Gateway decision log**. The launcher's readiness POST of `{}` can instead return `400 INVALID_JSON_RPC`.
+5. To include front-side handler messages such as `source-http (mcp-fsh): Received HTTP/1.1 POST for /mcp`, clear Search and follow the same transaction ID and timestamp. A category filter of `mpgw` excludes `source-http`, `latency`, `extlatency`, and `api-stats` events.
 
-Set the log level back to `notice` after the demo so a fresh boot's log stays quiet.
+**If you see `mpgw (rest-mgmt-int): Rejected by filter; SOAP fault sent`:** that event identifies the internal management service, not `mcp-gateway`. In the local container, failed WebGUI Probe/capture operations can produce these errors. Check adjacent events with the same transaction ID for the specific cause. They do not establish that an MCP call failed. Search `mcp-gateway` and run a fresh read probe to check the actual data path; an `Operational state up` notice alone is not a request trace.
 
-**Log level does not persist across a restart.** `./demo.sh down` runs `podman stop` and `./demo.sh up` runs `podman start` on the same container, which reboots DataPower and re-executes `auto-startup.cfg` from scratch. The config directory is mounted read-only, so even the WebGUI **Save** button cannot write the change back. Everything defined in `auto-startup.cfg` (the `mcp-gateway` object, the handler, the WebGUI, admin/admin) returns automatically, but the manual log-level bump must be redone after each `up`. Treat it as a two-click step in the run-of-show.
+**Log level does not persist across a restart.** Return the capture level to its previous setting after inspection. `./demo.sh down` stops the container; `./demo.sh up` starts it again and re-executes `auto-startup.cfg`. The config directory is mounted read-only, so the WebGUI **Save** button cannot persist this manual change. After every `down` → `up` cycle (or Ctrl+C → `up`), repeat this demo checklist:
+
+1. Open **Administration → Debug → Troubleshooting → Logging → Set Log Level**, choose **debug**, and click **Submit**.
+2. Run a fresh **200 read probe** from **Secure the path**.
+3. Open **System Log**, search for **`mcp-gateway`**, and click **Refresh**.
+
+The launcher uses `./demo.sh down` to stop the demo; there is no `./demo.sh stop` command. Reloading only the Runway browser page does not restart DataPower or reset its capture level.
 
 **Skip the transaction Probe.** The service's built-in Probe / capture wizard fails in this edition (`Failed to create the capture setting`) because it depends on the `apic-gw-service` sidecar, which the developer/limited edition does not run — you will see it reported as stopped in the log. Use the log-level + System Log recipe above instead; it needs no sidecar. Red `webgui-ssl` / `webgui-manager` lines in the System Log are also expected: they are the self-signed-cert handshake and internal management plumbing, not the MCP data path.
 

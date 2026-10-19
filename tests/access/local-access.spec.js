@@ -82,3 +82,35 @@ test('an expired local session renews once before retrying the API', async ({ pa
   expect(requests.filter(r => r.pathname === '/local-session')).toHaveLength(2);
   await expect(page.locator('#access-dialog')).not.toBeVisible();
 });
+
+test('presenter clock survives running and paused reloads, expires, and resets', async ({ page }) => {
+  await mockApp(page);
+  const started = new Date('2026-10-19T19:00:00Z');
+  await page.clock.install({ time: started });
+  await page.goto('/');
+  await expect(page.locator('#connection')).toContainText('Connected');
+  await page.locator('#timer-toggle').click();
+  await page.clock.fastForward(65000);
+  await expect(page.locator('#timer')).toHaveText('13:55');
+  // Simulate time passing during a reload without relying on interval ticks.
+  await page.clock.setSystemTime(new Date(started.getTime() + 125000));
+  await page.reload();
+  await expect(page.locator('#timer')).toHaveText('12:55');
+  await expect(page.locator('#timer-toggle')).toHaveText('Ⅱ');
+  await page.locator('#timer-toggle').click();
+  await page.clock.fastForward(30000);
+  await page.reload();
+  await expect(page.locator('#timer')).toHaveText('12:55');
+  await expect(page.locator('#timer-caption')).toContainText('paused');
+  await page.locator('#timer-toggle').click();
+  await page.clock.setSystemTime(new Date(started.getTime() + 1000000));
+  await page.reload();
+  await expect(page.locator('#timer')).toHaveText('00:00');
+  await expect(page.locator('#timer-toggle')).toHaveText('↻');
+  await page.reload();
+  await expect(page.locator('#timer')).toHaveText('00:00');
+  await page.locator('#timer-reset').click();
+  await page.reload();
+  await expect(page.locator('#timer')).toHaveText('15:00');
+  expect(await page.evaluate(() => [localStorage.length, sessionStorage.length])).toEqual([0, 0]);
+});

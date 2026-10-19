@@ -241,19 +241,44 @@ async function refreshHistory() {
   })));
 }
 $('#refresh-history').addEventListener('click', (event) => action(event.currentTarget, refreshHistory));
+// Keep only the presenter clock in this tab's storage; credentials stay in memory.
+const timerStorageKey = 'runway.presenter-timer.v1';
+function saveTimer() {
+  try { sessionStorage.setItem(timerStorageKey, JSON.stringify({ end: state.timerEnd, remaining: state.remaining })); }
+  catch { /* The timer still works when browser storage is unavailable. */ }
+}
+function renderTimer() {
+  const remaining = state.timerEnd ? Math.max(0, Math.ceil((state.timerEnd - Date.now()) / 1000)) : state.remaining;
+  if (state.timerEnd && remaining === 0) { state.timerEnd = null; state.remaining = 0; saveTimer(); }
+  $('#timer').textContent = `${String(Math.floor(remaining / 60)).padStart(2, '0')}:${String(remaining % 60).padStart(2, '0')}`;
+  $('#timer-progress').style.width = `${((900 - remaining) / 900) * 100}%`;
+  $('#timer-toggle').textContent = state.timerEnd ? 'Ⅱ' : remaining === 0 ? '↻' : '▶';
+  $('#timer-caption').textContent = state.timerEnd ? 'Build 4 min · Secure 4 min · Execute 7 min'
+    : remaining === 0 ? 'Time for the takeaway. Your demo stays available.'
+    : remaining === 900 ? 'Ready when you are. Start the presenter timer.' : 'Presenter timer paused. Take your time.';
+}
+try {
+  const saved = JSON.parse(sessionStorage.getItem(timerStorageKey));
+  if (saved && Number.isInteger(saved.remaining) && saved.remaining >= 0 && saved.remaining <= 900
+      && (saved.end === null || (Number.isFinite(saved.end) && saved.end > 0 && saved.end <= Date.now() + 900000))) {
+    state.timerEnd = saved.end;
+    state.remaining = saved.remaining;
+  }
+} catch { /* Ignore missing or invalid saved clock data. */ }
 $('#timer-toggle').addEventListener('click', () => {
   if (state.timerEnd) { state.remaining = Math.max(0, Math.ceil((state.timerEnd - Date.now()) / 1000)); state.timerEnd = null; }
   else { if (!state.remaining) state.remaining = 900; state.timerEnd = Date.now() + state.remaining * 1000; }
-  $('#timer-toggle').textContent = state.timerEnd ? 'Ⅱ' : '▶';
-  $('#timer-caption').textContent = state.timerEnd ? 'Build 4 min · Secure 4 min · Execute 7 min' : 'Presenter timer paused. Take your time.';
+  saveTimer();
+  renderTimer();
 });
-setInterval(() => {
-  if (!state.timerEnd) return;
-  const remaining = Math.max(0, Math.ceil((state.timerEnd - Date.now()) / 1000));
-  $('#timer').textContent = `${String(Math.floor(remaining / 60)).padStart(2, '0')}:${String(remaining % 60).padStart(2, '0')}`;
-  $('#timer-progress').style.width = `${((900 - remaining) / 900) * 100}%`;
-  if (remaining === 0) { state.timerEnd = null; state.remaining = 0; $('#timer-toggle').textContent = '↻'; $('#timer-caption').textContent = 'Time for the takeaway. Your demo stays available.'; }
-}, 500);
+$('#timer-reset').addEventListener('click', () => {
+  state.timerEnd = null;
+  state.remaining = 900;
+  try { sessionStorage.removeItem(timerStorageKey); } catch { /* Storage is optional. */ }
+  renderTimer();
+});
+renderTimer();
+setInterval(renderTimer, 500);
 document.addEventListener('keydown', (event) => {
   if ((event.metaKey || event.ctrlKey) && event.key === 'Enter' && state.view === 'execute' && !$('#access-dialog').open) { event.preventDefault(); $('#run').click(); }
 });

@@ -48,8 +48,14 @@ reverse proxy so the demo's security story stays in the policy service:
 - Preserves `Authorization`, `Accept`, `Content-Type`, `Mcp-Session-Id` and
   `Mcp-Protocol-Version`; timeouts (120 s) stay above the runtime's 15 s tool deadline.
 
-To watch traffic during the talk, follow the `[datapower]` lines in the `./demo.sh up`
-terminal — each forwarded request is logged by the gateway.
+To inspect requests during the talk, first enable a short debug capture through
+**Administration → Debug → Troubleshooting → Set Log Level**. The default capture
+level does not record successful request details. In **System Log**, search for
+`mcp-gateway`, then run a fresh read probe and refresh. See the
+[WebGUI walkthrough](../../README.md#driving-the-datapower-webgui-in-the-demo) for
+transaction correlation and distinguishing internal management errors from MCP traffic.
+The launcher streams the container console as `[datapower]`; console and System Log
+are separate log targets, so do not assume they capture identical events.
 
 ## Moving to a production DataPower
 
