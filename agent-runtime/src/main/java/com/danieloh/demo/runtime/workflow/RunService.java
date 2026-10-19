@@ -34,7 +34,8 @@ public class RunService {
             var future=workers.submit(() -> {
                 try { execute(id,incidentId,mode,prompt); }
                 catch(Exception e) {
-                    LOG.warnf("Run %s failed: %s",id,e.getClass().getSimpleName());
+                    Throwable root=e; while(root.getCause()!=null) root=root.getCause();
+                    LOG.warnf("Run %s failed: %s — %s",id,e.getClass().getSimpleName(),root.getMessage());
                     fail(id,"Execution failed. Verify the model, gateway and tool services, then start a new run.");
                 } finally {slots.release();}
             });

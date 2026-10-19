@@ -73,10 +73,10 @@ class InvestigationWorkflowTest {
     }
 
     @Test
-    void rejectsTheFourthToolCallInOneResponse() {
-        when(model.chat(any(ChatRequest.class))).thenReturn(toolResponse(4));
+    void rejectsSixthToolCallInOneResponseEnforcesLimitOfFive() {
+        when(model.chat(any(ChatRequest.class))).thenReturn(toolResponse(6));
         assertThrows(RuntimeException.class,() -> workflow.investigate(UUID.randomUUID(),"Investigate INC-2042","Evidence"));
-        assertEquals(3,AgentMcpTestResource.calls().size());
+        assertEquals(5,AgentMcpTestResource.calls().size());
         verify(model,times(1)).chat(any(ChatRequest.class));
         verify(runs,never()).event(any(),eq("reviewer"),anyString(),anyString());
     }
