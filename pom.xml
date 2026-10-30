@@ -20,7 +20,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <quarkus.platform.version>3.40.1.1</quarkus.platform.version>
         <langchain4j.version>1.14.2</langchain4j.version>
-        <mcp.version>2.0.3</mcp.version>
+        <mcp.version>2.0.4</mcp.version>
     </properties>
     <modules>
         <module>shared</module>
